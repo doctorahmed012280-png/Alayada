@@ -218,7 +218,8 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       <div class="grid-2">
         <div class="panel">
           <h3>تسجيل حالة في الطابور</h3>
-          <div class="field"><label for="q-phone">هاتف المريضة</label><input id="q-phone" type="tel" placeholder="01xxxxxxxxx"></div>
+          <div class="field"><label for="q-phone">اسم المريضة أو رقم الهاتف</label><input id="q-phone" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off"></div>
+          <div id="q-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div id="q-patient-found" class="empty-state" style="display:none;"></div>
           <div class="field"><label for="q-doctor">الطبيب المعالج</label><select id="q-doctor"></select></div>
           <button class="btn btn-primary" id="q-checkin-btn">تسجيل في الطابور</button>
@@ -235,8 +236,8 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       <div class="grid-2">
         <div class="panel">
           <h3>بحث / إضافة مريضة</h3>
-          <div class="field"><label for="p-search">ابحث برقم الهاتف</label><input id="p-search" type="tel" placeholder="01xxxxxxxxx"></div>
-          <button class="btn btn-ghost btn-sm" id="p-search-btn">بحث</button>
+          <div class="field"><label for="p-search">ابحثي بالاسم أو رقم الهاتف</label><input id="p-search" type="text" placeholder="اسم المريضة أو رقم الهاتف" autocomplete="off"></div>
+          <div id="p-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
           <h4>بيانات مريضة جديدة</h4>
           <div class="field-row">
@@ -269,7 +270,8 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       <div class="grid-2">
         <div class="panel">
           <h3>فاتورة جديدة</h3>
-          <div class="field"><label for="b-phone">هاتف المريضة</label><input id="b-phone" type="tel"></div>
+          <div class="field"><label for="b-phone">اسم المريضة أو رقم الهاتف</label><input id="b-phone" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off"></div>
+          <div id="b-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div class="field-row">
             <div class="field"><label>الكشف</label><input id="b-consult" type="number" value="0" class="num"></div>
             <div class="field"><label>سونار</label><input id="b-sono" type="number" value="0" class="num"></div>
@@ -524,6 +526,49 @@ function customFieldsWidgetHtml(listId, addBtnId) {
 }
 
 /* ============================================================
+   SMART PATIENT SEARCH WIDGET (reusable: check-in, patients tab,
+   billing). Type a name (any part of it, Arabic-variant tolerant)
+   or any part of a phone number → live dropdown of matches.
+   ============================================================ */
+function wireSmartPatientSearch(inputId, dropdownId, onSelect) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  let debounceTimer = null;
+
+  function hideDropdown() { dropdown.style.display = "none"; dropdown.innerHTML = ""; }
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    const query = input.value.trim();
+    if (query.length < 2) { hideDropdown(); return; }
+    debounceTimer = setTimeout(async () => {
+      const results = await searchPatients(query);
+      if (!results.length) {
+        dropdown.innerHTML = `<div style="padding:10px 12px;color:var(--ink-soft);font-size:.85rem;">لا توجد نتائج</div>`;
+        dropdown.style.display = "";
+        return;
+      }
+      dropdown.innerHTML = results.map((p, i) => `
+        <div class="smart-search-item" data-i="${i}" style="padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;">
+          <strong>${p.name}</strong> <span class="mono" style="color:var(--ink-soft);font-size:.85rem;">${p.phone || ""}</span>
+        </div>`).join("");
+      dropdown.style.display = "";
+      dropdown.querySelectorAll(".smart-search-item").forEach(el => {
+        el.addEventListener("click", () => {
+          const patient = results[Number(el.dataset.i)];
+          hideDropdown();
+          onSelect(patient);
+        });
+      });
+    }, 250);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (e.target !== input && !dropdown.contains(e.target)) hideDropdown();
+  });
+}
+
+/* ============================================================
    DATA LAYER
    ============================================================ */
 /* All paths below are scoped under tenants/{me.tenantId}/... so one
@@ -537,6 +582,42 @@ async function findPatientByPhone(phone) {
   const patientId = idxSnap.val();
   const pSnap = await get(ref(db, t(`patients/${patientId}`)));
   return pSnap.exists() ? { id: patientId, ...pSnap.val() } : null;
+}
+
+/* Normalizes Arabic text for forgiving search: strips diacritics/
+   tatweel, unifies common letter variants (أ/إ/آ → ا, ى → ي, ة → ه),
+   collapses whitespace. Lets "احمد", "أحمد", "آحمد" all match. */
+function normalizeArabic(str) {
+  return (str || "").toString()
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, "")
+    .replace(/[إأآا]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/* Smart search: matches by (partial) name OR (partial) phone digits,
+   anywhere in the string — not just an exact/prefix match. Reads the
+   whole patients list for the tenant once per call; fine for a
+   single clinic's patient volume. */
+async function searchPatients(query) {
+  const qName = normalizeArabic(query);
+  const qDigits = (query || "").replace(/\D/g, "");
+  if (!qName && !qDigits) return [];
+  const snap = await get(ref(db, t("patients")));
+  if (!snap.exists()) return [];
+  const results = [];
+  snap.forEach((child) => {
+    const p = child.val();
+    const nameNorm = normalizeArabic(p.name);
+    const nameMatch = qName && nameNorm.includes(qName);
+    const phoneMatch = qDigits.length >= 3 && (p.phone || "").includes(qDigits);
+    if (nameMatch || phoneMatch) results.push({ id: child.key, ...p, _startsWith: nameNorm.startsWith(qName) });
+  });
+  results.sort((a, b) => (a._startsWith === b._startsWith ? 0 : a._startsWith ? -1 : 1));
+  return results.slice(0, 8);
 }
 async function createPatient(branchId, data) {
   const newRef = push(ref(db, t("patients")));
@@ -831,18 +912,14 @@ async function loadDoctorsForBranch() {
 function wireQueuePanel() {
   const phoneInput = document.getElementById("q-phone");
   const foundBox = document.getElementById("q-patient-found");
-  phoneInput.onchange = async () => {
-    const phone = phoneInput.value.trim();
-    if (!phone) return;
-    const patient = await findPatientByPhone(phone);
+  wireSmartPatientSearch("q-phone", "q-search-dropdown", (patient) => {
     lastFoundPatient = patient;
+    phoneInput.value = `${patient.name} — ${patient.phone}`;
     foundBox.style.display = "";
-    foundBox.innerHTML = patient
-      ? `<strong>${patient.name}</strong> — ${patient.age ?? "—"} سنة`
-      : `لا توجد مريضة بهذا الرقم. أضيفيها أولاً من تبويب "المرضى".`;
-  };
+    foundBox.innerHTML = `<strong>${patient.name}</strong> — ${patient.age ?? "—"} سنة`;
+  });
   document.getElementById("q-checkin-btn").onclick = async () => {
-    if (!lastFoundPatient) { alert("ابحثي عن المريضة برقم الهاتف أولاً."); return; }
+    if (!lastFoundPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
     const doctorId = document.getElementById("q-doctor").value;
     if (!doctorId) { alert("اختاري الطبيب المعالج."); return; }
     await checkInPatient({ branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name, doctorId, createdBy: me.uid });
@@ -872,19 +949,16 @@ function renderQueue(rows) {
 
 function wirePatientsPanel() {
   wireCustomFieldsWidget("p-cf-list", "p-cf-add");
-  document.getElementById("p-search-btn").onclick = async () => {
-    const phone = document.getElementById("p-search").value.trim();
-    const resultBox = document.getElementById("p-result");
-    if (!phone) return;
-    const patient = await findPatientByPhone(phone);
-    if (!patient) { resultBox.innerHTML = `<div class="icon">🙈</div>لا توجد مريضة بهذا الرقم`; return; }
+  const resultBox = document.getElementById("p-result");
+  wireSmartPatientSearch("p-search", "p-search-dropdown", (patient) => {
+    document.getElementById("p-search").value = `${patient.name} — ${patient.phone}`;
     resultBox.className = "";
     resultBox.innerHTML = `<h4 style="margin-top:0">${patient.name}</h4>
       <div class="mono" style="color:var(--ink-soft);margin-bottom:8px;">${patient.phone}</div>
       <div>السن: ${patient.age ?? "—"} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
       <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>
       ${renderCustomFieldsView(patient.customFields)}`;
-  };
+  });
   document.getElementById("p-create-btn").onclick = async () => {
     const name = document.getElementById("p-name").value.trim();
     const phone = document.getElementById("p-phone").value.trim();
@@ -908,10 +982,14 @@ function wireBillingPanel() {
   function recalc() { total.value = (Number(consult.value)||0) + (Number(sono.value)||0) + (Number(extraVal.value)||0); }
   [consult, sono, extraVal].forEach(el => el.oninput = recalc);
   recalc();
+  let selectedBillingPatient = null;
+  wireSmartPatientSearch("b-phone", "b-search-dropdown", (patient) => {
+    selectedBillingPatient = patient;
+    document.getElementById("b-phone").value = `${patient.name} — ${patient.phone}`;
+  });
   document.getElementById("b-create-btn").onclick = async () => {
-    const phone = document.getElementById("b-phone").value.trim();
-    const patient = await findPatientByPhone(phone);
-    if (!patient) { alert("لا توجد مريضة بهذا الرقم."); return; }
+    if (!selectedBillingPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
+    const patient = selectedBillingPatient;
     const items = { consultation: Number(consult.value)||0, ultrasound: Number(sono.value)||0 };
     const extraLabel = document.getElementById("b-extra-label").value.trim();
     if (extraLabel) items[extraLabel] = Number(extraVal.value) || 0;
@@ -919,6 +997,7 @@ function wireBillingPanel() {
     await createInvoice(me.branchId, { patientId: patient.id, patientName: patient.name, items, total: Number(total.value)||0, paid: true, cashierUid: me.uid, customFields });
     alert("تم إصدار الفاتورة.");
     document.getElementById("b-phone").value = "";
+    selectedBillingPatient = null;
     document.getElementById("b-extra-label").value = "";
     consult.value = "0"; sono.value = "0"; extraVal.value = "0"; recalc();
     clearCustomFields("b-cf-list");
