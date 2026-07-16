@@ -252,6 +252,9 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
               </select></div>
           </div>
           <div class="field"><label>جهة اتصال للطوارئ</label><input id="p-emergency" placeholder="الاسم — الهاتف"></div>
+          <div class="field"><label>بيانات إضافية (اختياري)</label></div>
+          <div id="p-cf-list"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="p-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
           <button class="btn btn-accent" id="p-create-btn">حفظ المريضة</button>
         </div>
         <div class="panel">
@@ -274,6 +277,9 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           <div class="field"><label>بند إضافي (اختياري)</label><input id="b-extra-label" placeholder="الوصف"></div>
           <div class="field"><label>قيمة البند الإضافي</label><input id="b-extra-value" type="number" value="0" class="num"></div>
           <div class="field"><label>الإجمالي</label><input id="b-total" class="num" readonly></div>
+          <div class="field"><label>بيانات إضافية (اختياري)</label></div>
+          <div id="b-cf-list"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="b-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
           <button class="btn btn-primary" id="b-create-btn">إصدار الفاتورة</button>
         </div>
         <div class="panel">
@@ -316,6 +322,9 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
             <div class="field"><label>نتائج السونار</label><textarea id="v-ultrasound" rows="2"></textarea></div>
             <div class="field"><label>التشخيص</label><textarea id="v-diagnosis" rows="2"></textarea></div>
             <div class="field"><label>الروشتة</label><textarea id="v-prescription" rows="2"></textarea></div>
+            <div class="field"><label>بيانات إضافية (اختياري)</label></div>
+            <div id="v-cf-list"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
             <button class="btn btn-primary" id="v-complete-btn">حفظ الكشف وإنهاء الزيارة</button>
           </div>
         </div>
@@ -335,6 +344,9 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
               <div class="field"><label>وزن الجنين (جم) — اختياري</label><input type="number" id="anc-weight"></div>
               <div class="field"><label>تنبيه معملي (Hgb / PLT…) — اختياري</label><input type="text" id="anc-lab"></div>
             </div>
+            <div class="field"><label>بيانات إضافية (اختياري)</label></div>
+            <div id="anc-cf-list"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="anc-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
             <button class="btn btn-ghost btn-sm" id="anc-add-btn">إضافة زيارة متابعة</button>
             <ul class="timeline" id="anc-visits" style="margin-top:16px;"></ul>
           </div>
@@ -466,6 +478,50 @@ function formatTime(ts) {
 }
 const QUEUE_STATUS_LABELS = { "waiting": "في الانتظار", "in-clinic": "داخل الكشف", "done": "تم الكشف", "cancelled": "ملغي" };
 function todayKey() { return new Date().toISOString().slice(0, 10); }
+
+/* ============================================================
+   CUSTOM FIELDS WIDGET (reusable everywhere: patients, invoices,
+   visits, ANC). Lets the user add ad-hoc "label: value" rows for
+   data with no dedicated field, without touching the code.
+   ============================================================ */
+function customFieldsAddRow(listId, label = "", value = "") {
+  const wrap = document.getElementById(listId);
+  const row = document.createElement("div");
+  row.className = "field-row custom-field-row";
+  row.style.cssText = "align-items:flex-end;gap:8px;";
+  row.innerHTML = `
+    <div class="field" style="flex:1;margin-bottom:0;"><label>اسم الحقل</label><input class="cf-label" placeholder="مثال: رقم التأمين"></div>
+    <div class="field" style="flex:1;margin-bottom:0;"><label>القيمة</label><input class="cf-value"></div>
+    <button type="button" class="btn btn-ghost btn-sm cf-remove">حذف</button>`;
+  row.querySelector(".cf-label").value = label;
+  row.querySelector(".cf-value").value = value;
+  row.querySelector(".cf-remove").addEventListener("click", () => row.remove());
+  wrap.appendChild(row);
+}
+function wireCustomFieldsWidget(listId, addBtnId) {
+  document.getElementById(addBtnId).addEventListener("click", () => customFieldsAddRow(listId));
+}
+function readCustomFields(listId) {
+  const data = {};
+  document.querySelectorAll(`#${listId} .custom-field-row`).forEach(row => {
+    const label = row.querySelector(".cf-label").value.trim();
+    const value = row.querySelector(".cf-value").value.trim();
+    if (label) data[label] = value;
+  });
+  return data;
+}
+function clearCustomFields(listId) { document.getElementById(listId).innerHTML = ""; }
+function renderCustomFieldsView(data) {
+  if (!data || !Object.keys(data).length) return "";
+  return `<div style="margin-top:6px;font-size:.82rem;color:var(--ink-soft);">` +
+    Object.entries(data).map(([k, v]) => `<div>· <strong>${k}:</strong> ${v}</div>`).join("") +
+    `</div>`;
+}
+function customFieldsWidgetHtml(listId, addBtnId) {
+  return `<div class="field"><label>بيانات إضافية (اختياري)</label></div>
+    <div id="${listId}"></div>
+    <button type="button" class="btn btn-ghost btn-sm" id="${addBtnId}" style="margin-bottom:12px;">+ إضافة حقل</button>`;
+}
 
 /* ============================================================
    DATA LAYER
@@ -815,6 +871,7 @@ function renderQueue(rows) {
 }
 
 function wirePatientsPanel() {
+  wireCustomFieldsWidget("p-cf-list", "p-cf-add");
   document.getElementById("p-search-btn").onclick = async () => {
     const phone = document.getElementById("p-search").value.trim();
     const resultBox = document.getElementById("p-result");
@@ -825,7 +882,8 @@ function wirePatientsPanel() {
     resultBox.innerHTML = `<h4 style="margin-top:0">${patient.name}</h4>
       <div class="mono" style="color:var(--ink-soft);margin-bottom:8px;">${patient.phone}</div>
       <div>السن: ${patient.age ?? "—"} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
-      <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>`;
+      <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>
+      ${renderCustomFieldsView(patient.customFields)}`;
   };
   document.getElementById("p-create-btn").onclick = async () => {
     const name = document.getElementById("p-name").value.trim();
@@ -833,15 +891,18 @@ function wirePatientsPanel() {
     const age = Number(document.getElementById("p-age").value) || null;
     const bloodType = document.getElementById("p-blood").value;
     const emergencyContact = document.getElementById("p-emergency").value.trim();
+    const customFields = readCustomFields("p-cf-list");
     if (!name || !phone) { alert("الاسم ورقم الهاتف مطلوبان."); return; }
     if (await findPatientByPhone(phone)) { alert("توجد بالفعل مريضة بهذا الرقم."); return; }
-    await createPatient(me.branchId, { name, phone, age, bloodType, emergencyContact });
+    await createPatient(me.branchId, { name, phone, age, bloodType, emergencyContact, customFields });
     alert("تم حفظ بيانات المريضة.");
     ["p-name", "p-phone", "p-age", "p-emergency"].forEach(id => document.getElementById(id).value = "");
+    clearCustomFields("p-cf-list");
   };
 }
 
 function wireBillingPanel() {
+  wireCustomFieldsWidget("b-cf-list", "b-cf-add");
   const consult = document.getElementById("b-consult"), sono = document.getElementById("b-sono");
   const extraVal = document.getElementById("b-extra-value"), total = document.getElementById("b-total");
   function recalc() { total.value = (Number(consult.value)||0) + (Number(sono.value)||0) + (Number(extraVal.value)||0); }
@@ -854,11 +915,13 @@ function wireBillingPanel() {
     const items = { consultation: Number(consult.value)||0, ultrasound: Number(sono.value)||0 };
     const extraLabel = document.getElementById("b-extra-label").value.trim();
     if (extraLabel) items[extraLabel] = Number(extraVal.value) || 0;
-    await createInvoice(me.branchId, { patientId: patient.id, patientName: patient.name, items, total: Number(total.value)||0, paid: true, cashierUid: me.uid });
+    const customFields = readCustomFields("b-cf-list");
+    await createInvoice(me.branchId, { patientId: patient.id, patientName: patient.name, items, total: Number(total.value)||0, paid: true, cashierUid: me.uid, customFields });
     alert("تم إصدار الفاتورة.");
     document.getElementById("b-phone").value = "";
     document.getElementById("b-extra-label").value = "";
     consult.value = "0"; sono.value = "0"; extraVal.value = "0"; recalc();
+    clearCustomFields("b-cf-list");
   };
 }
 
@@ -869,7 +932,8 @@ function renderBilling(rows) {
   rows.slice(0, 30).forEach(row => {
     const li = document.createElement("li");
     li.innerHTML = `<div class="t-date">${formatTime(row.timestamp)}</div>
-      <div class="t-body"><strong>${row.patientName}</strong> — <span class="num">${row.total} ج.م</span></div>`;
+      <div class="t-body"><strong>${row.patientName}</strong> — <span class="num">${row.total} ج.م</span>
+      ${renderCustomFieldsView(row.customFields)}</div>`;
     list.appendChild(li);
   });
 }
@@ -950,23 +1014,27 @@ function renderTimeline(rows) {
         ${r.symptoms ? `الأعراض: ${r.symptoms}<br>` : ""}
         ${r.ultrasoundFindings ? `سونار: ${r.ultrasoundFindings}<br>` : ""}
         ${r.prescription ? `روشتة: ${r.prescription}` : ""}
-      </div>`;
+      </div>
+      ${renderCustomFieldsView(r.customFields)}`;
     list.appendChild(li);
   });
 }
 
 function wireExamPanel() {
+  wireCustomFieldsWidget("v-cf-list", "v-cf-add");
   document.getElementById("v-complete-btn").onclick = async () => {
     if (!currentPatientId) return;
     const record = {
       symptoms: document.getElementById("v-symptoms").value.trim(),
       ultrasoundFindings: document.getElementById("v-ultrasound").value.trim(),
       diagnosis: document.getElementById("v-diagnosis").value.trim(),
-      prescription: document.getElementById("v-prescription").value.trim()
+      prescription: document.getElementById("v-prescription").value.trim(),
+      customFields: readCustomFields("v-cf-list")
     };
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
     alert("تم حفظ الكشف وإنهاء الزيارة.");
     currentQueueId = null;
+    clearCustomFields("v-cf-list");
   };
 }
 
@@ -989,12 +1057,14 @@ function renderAnc(ancData) {
     li.innerHTML = `<div class="t-date">${v.gestationalWeek ?? "—"}wks · ${v.date || ""}</div>
       <div class="t-body">${v.note || ""}
         ${v.fetalWeightGrams ? ` — وزن الجنين: <span class="num">${v.fetalWeightGrams}g</span>` : ""}
-        ${v.lab ? ` — <span style="color:var(--accent)">${v.lab}</span>` : ""}</div>`;
+        ${v.lab ? ` — <span style="color:var(--accent)">${v.lab}</span>` : ""}
+        ${renderCustomFieldsView(v.customFields)}</div>`;
     list.appendChild(li);
   });
 }
 
 function wireAncPanel() {
+  wireCustomFieldsWidget("anc-cf-list", "anc-cf-add");
   const lmpInput = document.getElementById("anc-lmp");
   lmpInput.onchange = () => { document.getElementById("anc-edd").value = calcEDD(lmpInput.value) || ""; };
   document.getElementById("anc-start-btn").onclick = async () => {
@@ -1011,10 +1081,12 @@ function wireAncPanel() {
     const fetalWeightGrams = Number(document.getElementById("anc-weight").value) || null;
     const lab = document.getElementById("anc-lab").value.trim();
     const ga = currentLmp ? calcGestationalAge(currentLmp) : null;
+    const customFields = readCustomFields("anc-cf-list");
     await addAncVisit(currentPatientId, currentPregnancyId, {
-      note, fetalWeightGrams, lab: lab || null, gestationalWeek: ga ? ga.weeks : null, date: formatArabicDate()
+      note, fetalWeightGrams, lab: lab || null, gestationalWeek: ga ? ga.weeks : null, date: formatArabicDate(), customFields
     });
     ["anc-note","anc-weight","anc-lab"].forEach(id => document.getElementById(id).value = "");
+    clearCustomFields("anc-cf-list");
   };
 }
 
