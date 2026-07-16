@@ -217,16 +217,16 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     <section id="sec-view-queue" style="display:none;">
       <div class="grid-2">
         <div class="panel">
-          <h3>تسجيل حالة في الطابور</h3>
+          <h3>تسجيل حالة في الدور</h3>
           <div class="field"><label for="q-phone">اسم المريضة أو رقم الهاتف</label><input id="q-phone" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off"></div>
           <div id="q-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div id="q-patient-found" class="empty-state" style="display:none;"></div>
           <div class="field"><label for="q-doctor">الطبيب المعالج</label><select id="q-doctor"></select></div>
-          <button class="btn btn-primary" id="q-checkin-btn">تسجيل في الطابور</button>
+          <button class="btn btn-primary" id="q-checkin-btn">تسجيل في الدور</button>
         </div>
         <div class="panel">
-          <h3>طابور اليوم</h3>
-          <ul class="queue-list" id="queue-list"><li class="empty-state">لا يوجد مرضى في الطابور بعد</li></ul>
+          <h3>دور اليوم</h3>
+          <ul class="queue-list" id="queue-list"><li class="empty-state">لا يوجد مرضى في الدور بعد</li></ul>
         </div>
       </div>
     </section>
@@ -294,14 +294,22 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     <!-- ===== DOCTOR: queue ===== -->
     <section id="doc-view-queue" style="display:none;">
       <div class="panel">
-        <h3>المرضى بانتظار الكشف</h3>
-        <ul class="queue-list" id="doc-queue-list"><li class="empty-state">لا يوجد مرضى في طابورك الآن</li></ul>
+        <h3>الحالات المؤكدة النهاردة</h3>
+        <ul class="queue-list" id="doc-queue-list"><li class="empty-state">لا يوجد مرضى في دورك الآن</li></ul>
+      </div>
+      <div class="panel">
+        <h3>محجوزة النهاردة ولسه ما وصلتش</h3>
+        <ul class="queue-list" id="doc-appts-today-list"><li class="empty-state">لا يوجد حجوزات لليوم</li></ul>
+      </div>
+      <div class="panel">
+        <h3>حجوزات الأيام الجاية</h3>
+        <ul class="queue-list" id="doc-appts-upcoming-list"><li class="empty-state">لا توجد حجوزات قادمة</li></ul>
       </div>
     </section>
 
     <!-- ===== DOCTOR: chart ===== -->
     <section id="doc-view-chart" style="display:none;">
-      <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري مريضة من الطابور لفتح ملفها</div>
+      <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري مريضة من الدور لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
         <div class="panel">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
@@ -320,17 +328,16 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           </div>
           <div class="panel">
             <h3>كشف جديد</h3>
-            <div class="field"><label>الأعراض</label><textarea id="v-symptoms" rows="2"></textarea></div>
-            <div class="field"><label>نتائج السونار</label><textarea id="v-ultrasound" rows="2"></textarea></div>
-            <div class="field"><label>التشخيص</label><textarea id="v-diagnosis" rows="2"></textarea></div>
-            <div class="field"><label>الروشتة</label><textarea id="v-prescription" rows="2"></textarea></div>
+            <div id="v-abbrev-ref" style="display:none;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;font-size:.82rem;max-height:110px;overflow-y:auto;"></div>
+            <div class="field"><label>ملاحظات الكشف</label><textarea id="v-note" rows="6" placeholder="اكتبي ملاحظاتك بأي اختصارات معتادة عندك..."></textarea></div>
+            <div class="field"><label for="v-next-visit">موعد الزيارة القادمة (اختياري)</label><input id="v-next-visit" type="date"></div>
             <div class="field"><label>بيانات إضافية (اختياري)</label></div>
             <div id="v-cf-list"></div>
             <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
             <button class="btn btn-primary" id="v-complete-btn">حفظ الكشف وإنهاء الزيارة</button>
           </div>
         </div>
-        <div class="panel" id="anc-panel">
+        <div class="panel" id="anc-panel" style="display:none;">
           <h3>متابعة الحمل (ANC)</h3>
           <div id="anc-start" style="display:none;">
             <div class="field-row">
@@ -379,6 +386,24 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
         <div class="panel">
           <h3>الحسابات الحالية</h3>
           <ul class="timeline" id="s-accounts-list"><li class="empty-state">جاري التحميل…</li></ul>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <h3>إعدادات العيادة</h3>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="s-anc-toggle" style="width:18px;height:18px;">
+            تفعيل وحدة متابعة الحمل (ANC) — للعيادات النسائية فقط
+          </label>
+        </div>
+        <div class="panel">
+          <h3>الاختصارات الطبية</h3>
+          <div class="field-row">
+            <div class="field"><label for="ab-abbr">الاختصار</label><input id="ab-abbr" placeholder="مثال: ttt"></div>
+            <div class="field"><label for="ab-meaning">المعنى/المطلوب تسجيله</label><input id="ab-meaning" placeholder="مثال: نفس العلاج السابق"></div>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="ab-add-btn">+ إضافة اختصار</button>
+          <ul class="timeline" id="ab-list" style="margin-top:12px;"><li class="empty-state">لا توجد اختصارات بعد</li></ul>
         </div>
       </div>
     </section>
@@ -710,6 +735,94 @@ function subscribeBranchInvoices(branchId, callback) {
 }
 
 /* ============================================================
+   APPOINTMENTS (next-visit booking + arrival confirmation)
+   Stored per-date so "today's appointments" is a cheap direct
+   read; upcoming/all-dates views fall back to reading the whole
+   node and filtering client-side (fine at clinic scale).
+   ============================================================ */
+async function bookAppointment(date, { patientId, patientName, doctorId, bookedBy }) {
+  const newRef = push(ref(db, t(`appointments/${date}`)));
+  await set(newRef, { patientId, patientName, doctorId, bookedBy, confirmed: false, createdAt: serverTimestamp() });
+  return newRef.key;
+}
+function subscribeAppointmentsForDate(date, callback) {
+  const aRef = ref(db, t(`appointments/${date}`));
+  const handler = onValue(aRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    callback(rows);
+  });
+  return () => off(aRef, "value", handler);
+}
+async function confirmAppointment(date, apptId, queueId) {
+  await update(ref(db, t(`appointments/${date}/${apptId}`)), { confirmed: true, confirmedAt: serverTimestamp(), queueId: queueId || null });
+}
+/* Any appointment booked for `patientId` today, not yet confirmed —
+   used at check-in to auto-confirm instead of creating a stray extra
+   booking record. */
+async function findTodaysUnconfirmedAppointment(patientId) {
+  const snap = await get(ref(db, t(`appointments/${todayKey()}`)));
+  if (!snap.exists()) return null;
+  let found = null;
+  snap.forEach((child) => {
+    const v = child.val();
+    if (v.patientId === patientId && !v.confirmed) { found = { id: child.key, ...v }; }
+  });
+  return found;
+}
+/* Loads every appointment for one doctor across all dates (today's
+   arrivals excluded by the caller if needed) — used to build the
+   "today, not yet arrived" and "upcoming" lists on the doctor's screen. */
+async function loadDoctorAppointments(doctorId) {
+  const snap = await get(ref(db, t("appointments")));
+  if (!snap.exists()) return [];
+  const result = [];
+  snap.forEach((dateSnap) => {
+    const date = dateSnap.key;
+    dateSnap.forEach((apptSnap) => {
+      const v = apptSnap.val();
+      if (v.doctorId === doctorId) result.push({ id: apptSnap.key, date, ...v });
+    });
+  });
+  return result;
+}
+
+/* ============================================================
+   MEDICAL ABBREVIATIONS DICTIONARY (doctor-managed, per clinic)
+   A quick-reference list the doctor builds from الإعدادات so their
+   own shorthand ("ANC", "ttt"...) stays legible without hardcoding
+   any specialty into the app itself.
+   ============================================================ */
+async function addAbbreviation(abbr, meaning) {
+  const newRef = push(ref(db, t("abbreviations")));
+  await set(newRef, { abbr, meaning });
+  return newRef.key;
+}
+async function deleteAbbreviation(id) {
+  await set(ref(db, t(`abbreviations/${id}`)), null);
+}
+function subscribeAbbreviations(callback) {
+  const aRef = ref(db, t("abbreviations"));
+  const handler = onValue(aRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    callback(rows);
+  });
+  return () => off(aRef, "value", handler);
+}
+
+/* ============================================================
+   CLINIC SETTINGS (per-tenant toggles, e.g. optional ANC module)
+   ============================================================ */
+async function getClinicSettings() {
+  const snap = await get(ref(db, t("settings")));
+  return snap.exists() ? snap.val() : {};
+}
+async function setClinicSetting(key, value) {
+  await update(ref(db, t("settings")), { [key]: value });
+}
+
+/* ============================================================
    MULTI-TENANCY MODEL
    Every clinic ("tenant") gets its own slice of the database at
    /tenants/{tenantId}/... A tiny root-level pointer at
@@ -897,7 +1010,7 @@ function buildNav(items) {
 
 function buildSecretaryNav() {
   buildNav([
-    { target: "sec-view-queue", label: "الطابور اليومي", short: "الطابور", icon: "🕒" },
+    { target: "sec-view-queue", label: "الدور اليومي", short: "الدور", icon: "🕒" },
     { target: "sec-view-patients", label: "المرضى", short: "المرضى", icon: "👥" },
     { target: "sec-view-billing", label: "الفواتير", short: "الفواتير", icon: "🧾" }
   ]);
@@ -906,7 +1019,7 @@ function buildSecretaryNav() {
 
 function buildDoctorNav(showSettings) {
   const items = [
-    { target: "doc-view-queue", label: "طابوري اليوم", short: "طابوري", icon: "🕒" },
+    { target: "doc-view-queue", label: "دوري اليوم", short: "دوري", icon: "🕒" },
     { target: "doc-view-chart", label: "ملف المريضة", short: "الملف", icon: "🩺" }
   ];
   if (showSettings) items.push({ target: "view-settings", label: "الإعدادات", short: "الإعدادات", icon: "⚙️" });
@@ -948,24 +1061,28 @@ async function loadDoctorsForBranch() {
 function wireQueuePanel() {
   const phoneInput = document.getElementById("q-phone");
   const foundBox = document.getElementById("q-patient-found");
-  wireSmartPatientSearch("q-phone", "q-search-dropdown", (patient) => {
+  let lastFoundAppointment = null;
+  wireSmartPatientSearch("q-phone", "q-search-dropdown", async (patient) => {
     lastFoundPatient = patient;
     phoneInput.value = `${patient.name} — ${patient.phone}`;
     foundBox.style.display = "";
-    foundBox.innerHTML = `<strong>${patient.name}</strong> — ${patient.age ?? "—"} سنة`;
+    lastFoundAppointment = await findTodaysUnconfirmedAppointment(patient.id);
+    foundBox.innerHTML = `<strong>${patient.name}</strong> — ${patient.age ?? "—"} سنة` +
+      (lastFoundAppointment ? `<div style="color:var(--primary);margin-top:4px;">✓ عندها حجز لليوم — هيتأكد تلقائيًا عند التسجيل</div>` : "");
   });
   document.getElementById("q-checkin-btn").onclick = async () => {
     if (!lastFoundPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
     const doctorId = document.getElementById("q-doctor").value;
     if (!doctorId) { alert("اختاري الطبيب المعالج."); return; }
-    await checkInPatient({ branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name, doctorId, createdBy: me.uid });
-    phoneInput.value = ""; foundBox.style.display = "none"; lastFoundPatient = null;
+    const queueId = await checkInPatient({ branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name, doctorId, createdBy: me.uid });
+    if (lastFoundAppointment) { await confirmAppointment(lastFoundAppointment.date, lastFoundAppointment.id, queueId); }
+    phoneInput.value = ""; foundBox.style.display = "none"; lastFoundPatient = null; lastFoundAppointment = null;
   };
 }
 
 function renderQueue(rows) {
   const list = document.getElementById("queue-list");
-  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في الطابور بعد</li>`; return; }
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في الدور بعد</li>`; return; }
   list.innerHTML = "";
   rows.forEach(row => {
     const li = document.createElement("li");
@@ -1057,17 +1174,55 @@ function renderBilling(rows) {
    DOCTOR MODULE
    ============================================================ */
 let currentPatientId = null, currentQueueId = null, currentPregnancyId = null, currentLmp = null;
+let clinicAncEnabled = true;
 
 function initDoctor() {
   unsubs.push(subscribeToTodayQueue(me.branchId, renderDoctorQueue));
   wireExamPanel();
   wireAncPanel();
+  wireAbbrevReference();
+  loadAndRenderDoctorAppointments();
+  getClinicSettings().then(s => { clinicAncEnabled = s.ancEnabled !== false; });
+}
+
+function wireAbbrevReference() {
+  const box = document.getElementById("v-abbrev-ref");
+  unsubs.push(subscribeAbbreviations((rows) => {
+    if (!rows.length) { box.style.display = "none"; return; }
+    box.style.display = "";
+    box.innerHTML = `<strong>مرجع الاختصارات (دوسي عشان تضيفيها للملاحظة):</strong><br>` +
+      rows.map(a => `<span class="mono" style="cursor:pointer;text-decoration:underline dotted;margin-inline-end:10px;" data-abbr="${a.abbr}" title="${a.meaning}">${a.abbr}</span>`).join(" ");
+    box.querySelectorAll("[data-abbr]").forEach(el => {
+      el.addEventListener("click", () => {
+        const note = document.getElementById("v-note");
+        note.value += (note.value ? " " : "") + el.dataset.abbr;
+        note.focus();
+      });
+    });
+  }));
+}
+
+async function loadAndRenderDoctorAppointments() {
+  const all = await loadDoctorAppointments(me.uid);
+  const today = todayKey();
+  renderApptList("doc-appts-today-list", all.filter(a => a.date === today && !a.confirmed), false);
+  renderApptList("doc-appts-upcoming-list", all.filter(a => a.date > today).sort((a, b) => a.date.localeCompare(b.date)), true);
+}
+function renderApptList(listId, rows, showDate) {
+  const list = document.getElementById(listId);
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">${showDate ? "لا توجد حجوزات قادمة" : "لا يوجد حجوزات لليوم"}</li>`; return; }
+  list.innerHTML = "";
+  rows.forEach(a => {
+    const li = document.createElement("li");
+    li.innerHTML = `<div><strong>${a.patientName}</strong>${showDate ? ` <span class="mono" style="color:var(--ink-soft);">— ${a.date}</span>` : ""}</div>`;
+    list.appendChild(li);
+  });
 }
 
 function renderDoctorQueue(rows) {
   const mine = rows.filter(r => r.doctorId === me.uid && r.status !== "cancelled");
   const list = document.getElementById("doc-queue-list");
-  if (!mine.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في طابورك الآن</li>`; return; }
+  if (!mine.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في دورك الآن</li>`; return; }
   list.innerHTML = "";
   mine.forEach(row => {
     const li = document.createElement("li");
@@ -1103,9 +1258,12 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("c-obstetric").innerHTML = Object.keys(oh).length
     ? `<span class="mono">G${oh.gravida??0} P${oh.para??0} A${oh.abortions??0} L${oh.livingChildren??0}</span>` : "";
 
-  ["v-symptoms","v-ultrasound","v-diagnosis","v-prescription"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("v-note").value = "";
+  document.getElementById("v-next-visit").value = "";
+  document.getElementById("anc-panel").style.display = clinicAncEnabled ? "" : "none";
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
 
+  if (!clinicAncEnabled) { renderAnc(null); return; }
   const ancListSnap = await get(ref(db, t(`ancRecords/${patientId}`)));
   if (ancListSnap.exists()) {
     const entries = Object.entries(ancListSnap.val());
@@ -1123,12 +1281,15 @@ function renderTimeline(rows) {
   list.innerHTML = "";
   rows.forEach(r => {
     const li = document.createElement("li");
-    li.innerHTML = `<div class="t-date">${r.date || "—"}</div>
+    const oldFormat = r.diagnosis || r.symptoms || r.ultrasoundFindings || r.prescription;
+    li.innerHTML = `<div class="t-date">${r.date || "—"}${r.nextVisitDate ? ` — الزيارة القادمة: ${r.nextVisitDate}` : ""}</div>
       <div class="t-body">
-        ${r.diagnosis ? `<strong>${r.diagnosis}</strong><br>` : ""}
-        ${r.symptoms ? `الأعراض: ${r.symptoms}<br>` : ""}
-        ${r.ultrasoundFindings ? `سونار: ${r.ultrasoundFindings}<br>` : ""}
-        ${r.prescription ? `روشتة: ${r.prescription}` : ""}
+        ${r.note ? r.note.replace(/\n/g, "<br>") : ""}
+        ${oldFormat ? `
+          ${r.diagnosis ? `<strong>${r.diagnosis}</strong><br>` : ""}
+          ${r.symptoms ? `الأعراض: ${r.symptoms}<br>` : ""}
+          ${r.ultrasoundFindings ? `سونار: ${r.ultrasoundFindings}<br>` : ""}
+          ${r.prescription ? `روشتة: ${r.prescription}` : ""}` : ""}
       </div>
       ${renderCustomFieldsView(r.customFields)}`;
     list.appendChild(li);
@@ -1139,17 +1300,23 @@ function wireExamPanel() {
   wireCustomFieldsWidget("v-cf-list", "v-cf-add");
   document.getElementById("v-complete-btn").onclick = async () => {
     if (!currentPatientId) return;
+    const patientName = document.getElementById("c-name").textContent;
+    const nextVisitDate = document.getElementById("v-next-visit").value || null;
     const record = {
-      symptoms: document.getElementById("v-symptoms").value.trim(),
-      ultrasoundFindings: document.getElementById("v-ultrasound").value.trim(),
-      diagnosis: document.getElementById("v-diagnosis").value.trim(),
-      prescription: document.getElementById("v-prescription").value.trim(),
+      note: document.getElementById("v-note").value.trim(),
+      nextVisitDate,
       customFields: readCustomFields("v-cf-list")
     };
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
-    alert("تم حفظ الكشف وإنهاء الزيارة.");
+    if (nextVisitDate) {
+      await bookAppointment(nextVisitDate, { patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid });
+    }
+    alert(nextVisitDate ? "تم حفظ الكشف وحجز الزيارة القادمة." : "تم حفظ الكشف وإنهاء الزيارة.");
     currentQueueId = null;
+    document.getElementById("v-note").value = "";
+    document.getElementById("v-next-visit").value = "";
     clearCustomFields("v-cf-list");
+    loadAndRenderDoctorAppointments();
   };
 }
 
@@ -1214,6 +1381,8 @@ let settingsWired = false;
 async function initSettings() {
   await loadBranchesForSettings();
   await renderAccountsList();
+  const settings = await getClinicSettings();
+  document.getElementById("s-anc-toggle").checked = settings.ancEnabled !== false; // default ON
   if (!settingsWired) { wireSettingsPanel(); settingsWired = true; }
 }
 
@@ -1253,6 +1422,31 @@ async function renderAccountsList() {
 }
 
 function wireSettingsPanel() {
+  document.getElementById("s-anc-toggle").addEventListener("change", (e) => {
+    setClinicSetting("ancEnabled", e.target.checked).catch(err => console.error("setClinicSetting failed", err));
+  });
+
+  const abList = document.getElementById("ab-list");
+  subscribeAbbreviations((rows) => {
+    if (!rows.length) { abList.innerHTML = `<li class="empty-state">لا توجد اختصارات بعد</li>`; return; }
+    abList.innerHTML = "";
+    rows.forEach(a => {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="t-body"><strong>${a.abbr}</strong> — ${a.meaning}
+        <button type="button" class="btn btn-ghost btn-sm ab-del" data-id="${a.id}" style="margin-right:8px;">حذف</button></div>`;
+      li.querySelector(".ab-del").addEventListener("click", () => deleteAbbreviation(a.id));
+      abList.appendChild(li);
+    });
+  });
+  document.getElementById("ab-add-btn").onclick = async () => {
+    const abbr = document.getElementById("ab-abbr").value.trim();
+    const meaning = document.getElementById("ab-meaning").value.trim();
+    if (!abbr || !meaning) return;
+    await addAbbreviation(abbr, meaning);
+    document.getElementById("ab-abbr").value = "";
+    document.getElementById("ab-meaning").value = "";
+  };
+
   document.getElementById("s-create-btn").onclick = async () => {
     const errorBox = document.getElementById("s-error");
     errorBox.textContent = "";
