@@ -733,11 +733,33 @@ async function provisionNewTenant(uid, { name, email }) {
   const tenantId = uid; // owner's own uid doubles as the tenant id
   const accountRecord = { tenantId, role: "owner", branchId: "branch_01", name, email };
   // Written as two sequential calls (not one multi-location update) so the
-  // account record is fully committed before the tenant-scoped write, which
-  // depends on it, is evaluated by the security rules.
+  // account record is fully committed before the tenant-scoped writes,
+  // which depend on it, are evaluated by the security rules.
   await set(ref(db, `accounts/${uid}`), accountRecord);
-  await set(ref(db, `tenants/${tenantId}/branches/branch_01`), { name: "الفرع الرئيسي", active: true });
+  const updates = {};
+  updates[`tenants/${tenantId}/branches/branch_01`] = { name: "الفرع الرئيسي", active: true };
+  // The owner also acts as the clinic's doctor, so they need a tenant-scoped
+  // staff record too — that's the only thing the secretary's account is
+  // allowed to read (root-level /accounts/{uid} is private to its own uid),
+  // and it's what populates the "الطبيب المعالج" dropdown at check-in.
+  updates[`tenants/${tenantId}/staff/${uid}`] = { name, username: email, role: "owner", branchId: "branch_01" };
+  updates[`tenants/${tenantId}/branch_users_index/branch_01/${uid}`] = true;
+  await update(ref(db), updates);
   return accountRecord;
+}
+
+/* Backward-compatibility self-heal: clinics provisioned before the fix
+   above are missing their own owner from tenants/{id}/staff, so the
+   doctor dropdown looks empty to their secretary. Runs harmlessly (no-op)
+   for clinics that already have it. */
+async function ensureOwnerStaffRecord() {
+  if (me.role !== "owner") return;
+  const snap = await get(ref(db, t(`staff/${me.uid}`)));
+  if (snap.exists()) return;
+  const updates = {};
+  updates[t(`staff/${me.uid}`)] = { name: me.name, username: me.email, role: "owner", branchId: me.branchId };
+  updates[t(`branch_users_index/${me.branchId}/${me.uid}`)] = true;
+  await update(ref(db), updates);
 }
 
 /* ============================================================
@@ -826,6 +848,7 @@ function showApp() {
   document.getElementById("screen-app").style.display = "";
   document.getElementById("user-name").textContent = me.name || "—";
   document.getElementById("user-branch").textContent = me.branchId || "—";
+  ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
   if (me.role === "owner") buildDoctorNav(true);
   else if (me.role === "doctor") buildDoctorNav(false);
   else if (me.role === "secretary") buildSecretaryNav();
@@ -900,7 +923,7 @@ async function loadDoctorsForBranch() {
   if (!idxSnap.exists()) { sel.innerHTML = "<option>لا يوجد أطباء بهذا الفرع</option>"; return; }
   for (const uid of Object.keys(idxSnap.val())) {
     const uSnap = await get(ref(db, t(`staff/${uid}`)));
-    if (uSnap.exists() && uSnap.val().role === "doctor") {
+    if (uSnap.exists() && (uSnap.val().role === "doctor" || uSnap.val().role === "owner")) {
       const opt = document.createElement("option");
       opt.value = uid; opt.textContent = uSnap.val().name;
       sel.appendChild(opt);
@@ -1200,8 +1223,12 @@ async function renderAccountsList() {
   const list = document.getElementById("s-accounts-list");
   const snap = await get(ref(db, t("staff")));
   const rows = snap.exists() ? Object.entries(snap.val()).map(([id, u]) => ({ id, ...u })) : [];
-  // the owner themself isn't in tenants/{id}/staff — show them too
-  rows.unshift({ id: me.uid, name: me.name, username: me.email, role: "owner", branchId: me.branchId });
+  // Older tenants provisioned before the self-heal fix might still be
+  // missing the owner from tenants/{id}/staff for a brief moment — cover
+  // that case without ever showing the owner twice.
+  if (!rows.some(u => u.id === me.uid)) {
+    rows.unshift({ id: me.uid, name: me.name, username: me.email, role: "owner", branchId: me.branchId });
+  }
   list.innerHTML = "";
   rows.forEach(u => {
     const li = document.createElement("li");
