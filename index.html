@@ -186,8 +186,8 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 
     <form id="login-form">
       <div style="font-size:.85rem;font-weight:700;color:var(--primary-d);margin-bottom:10px;">دخول موظف (سكرتارية / طبيب)</div>
-      <div class="field"><label for="email">البريد الإلكتروني</label>
-        <input id="email" type="email" required autocomplete="username" placeholder="name@clinic.com"></div>
+      <div class="field"><label for="username">اسم المستخدم</label>
+        <input id="username" type="text" required autocomplete="username" placeholder="اسم المستخدم"></div>
       <div class="field"><label for="password">كلمة المرور</label>
         <input id="password" type="password" required autocomplete="current-password" placeholder="••••••••"></div>
       <div class="error-msg" id="error-msg"></div>
@@ -348,7 +348,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
         <div class="panel">
           <h3>إضافة حساب جديد</h3>
           <div class="field"><label for="s-name">الاسم</label><input id="s-name" placeholder="اسم الموظف"></div>
-          <div class="field"><label for="s-email">البريد الإلكتروني</label><input id="s-email" type="email" placeholder="name@alayada.clinic"></div>
+          <div class="field"><label for="s-username">اسم المستخدم</label><input id="s-username" placeholder="مثال: sara.sec" autocomplete="off"></div>
           <div class="field"><label for="s-password">كلمة المرور</label><input id="s-password" type="text" placeholder="6 أحرف على الأقل"></div>
           <div class="field-row">
             <div class="field"><label for="s-role">الدور</label>
@@ -401,6 +401,21 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
+
+/* ============================================================
+   USERNAME-BASED STAFF LOGIN
+   Firebase Auth only understands emails, so a username is turned
+   into a synthetic email under the hood (never a real inbox). A
+   public /usernames/{key} index maps it to that synthetic email
+   so the login screen can resolve it BEFORE the person is signed
+   in (i.e. before any tenant-scoped rule would apply).
+   ============================================================ */
+function usernameKey(username) {
+  return username.trim().toLowerCase().replace(/[.#$\[\]\/\s]/g, "_");
+}
+function syntheticEmailFor(usernameKeyValue, tenantId) {
+  return `${usernameKeyValue}.${tenantId}@staff.alayada.internal`;
+}
 
 /* Secondary app instance — used ONLY to create staff (secretary/doctor)
    Firebase Auth accounts without kicking the clinic owner out of their
@@ -630,14 +645,17 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const errorMsg = document.getElementById("error-msg");
   errorMsg.textContent = "";
-  const email = document.getElementById("email").value.trim();
+  const username = document.getElementById("username").value.trim();
   const password = document.getElementById("password").value;
   try {
-    await signInWithEmailAndPassword(auth, email, password);
+    const key = usernameKey(username);
+    const idxSnap = await get(ref(db, `usernames/${key}`));
+    if (!idxSnap.exists()) { errorMsg.textContent = "اسم المستخدم غير صحيح."; return; }
+    await signInWithEmailAndPassword(auth, idxSnap.val(), password);
     // onAuthStateChanged below picks it up from here
   } catch (err) {
     errorMsg.textContent = err.code === "auth/invalid-credential"
-      ? "البريد أو كلمة المرور غير صحيحة."
+      ? "اسم المستخدم أو كلمة المرور غير صحيحة."
       : `تعذّر تسجيل الدخول (${err.code || err.message}).`;
     console.error("login error", err);
   }
@@ -671,8 +689,9 @@ function showApp() {
   document.getElementById("screen-app").style.display = "";
   document.getElementById("user-name").textContent = me.name || "—";
   document.getElementById("user-branch").textContent = me.branchId || "—";
-  if (me.role === "secretary" || me.role === "owner") buildSecretaryNav();
-  else if (me.role === "doctor") buildDoctorNav();
+  if (me.role === "owner") buildDoctorNav(true);
+  else if (me.role === "doctor") buildDoctorNav(false);
+  else if (me.role === "secretary") buildSecretaryNav();
 }
 
 /* ============================================================
@@ -707,21 +726,20 @@ function buildSecretaryNav() {
   buildNav([
     { target: "sec-view-queue", label: "الطابور اليومي", short: "الطابور", icon: "🕒" },
     { target: "sec-view-patients", label: "المرضى", short: "المرضى", icon: "👥" },
-    { target: "sec-view-billing", label: "الفواتير", short: "الفواتير", icon: "🧾" },
-    { target: "view-settings", label: "الإعدادات", short: "الإعدادات", icon: "⚙️" }
+    { target: "sec-view-billing", label: "الفواتير", short: "الفواتير", icon: "🧾" }
   ]);
   initSecretary();
-  initSettings();
 }
 
-function buildDoctorNav() {
-  buildNav([
+function buildDoctorNav(showSettings) {
+  const items = [
     { target: "doc-view-queue", label: "طابوري اليوم", short: "طابوري", icon: "🕒" },
-    { target: "doc-view-chart", label: "ملف المريضة", short: "الملف", icon: "🩺" },
-    { target: "view-settings", label: "الإعدادات", short: "الإعدادات", icon: "⚙️" }
-  ]);
+    { target: "doc-view-chart", label: "ملف المريضة", short: "الملف", icon: "🩺" }
+  ];
+  if (showSettings) items.push({ target: "view-settings", label: "الإعدادات", short: "الإعدادات", icon: "⚙️" });
+  buildNav(items);
   initDoctor();
-  initSettings();
+  if (showSettings) initSettings();
 }
 
 /* ============================================================
@@ -1032,13 +1050,13 @@ async function renderAccountsList() {
   const snap = await get(ref(db, t("staff")));
   const rows = snap.exists() ? Object.entries(snap.val()).map(([id, u]) => ({ id, ...u })) : [];
   // the owner themself isn't in tenants/{id}/staff — show them too
-  rows.unshift({ id: me.uid, name: me.name, email: me.email, role: "owner", branchId: me.branchId });
+  rows.unshift({ id: me.uid, name: me.name, username: me.email, role: "owner", branchId: me.branchId });
   list.innerHTML = "";
   rows.forEach(u => {
     const li = document.createElement("li");
     const roleLabel = u.role === "doctor" ? "طبيب" : (u.role === "secretary" ? "سكرتارية" : "صاحب/ة العيادة");
     li.innerHTML = `<div class="t-date">${roleLabel} — ${u.branchId || "—"}</div>
-      <div class="t-body"><strong>${u.name || "—"}</strong> — <span class="mono">${u.email || "—"}</span></div>`;
+      <div class="t-body"><strong>${u.name || "—"}</strong> — <span class="mono">${u.username || "—"}</span></div>`;
     list.appendChild(li);
   });
 }
@@ -1049,28 +1067,34 @@ function wireSettingsPanel() {
     errorBox.textContent = "";
 
     const name = document.getElementById("s-name").value.trim();
-    const email = document.getElementById("s-email").value.trim();
+    const username = document.getElementById("s-username").value.trim();
     const password = document.getElementById("s-password").value;
     const role = document.getElementById("s-role").value;
     const branchId = document.getElementById("s-branch").value;
 
-    if (!name || !email || !password) { errorBox.textContent = "من فضلك أكملي كل الحقول."; return; }
+    if (!name || !username || !password) { errorBox.textContent = "من فضلك أكملي كل الحقول."; return; }
     if (password.length < 6) { errorBox.textContent = "كلمة المرور 6 أحرف على الأقل."; return; }
 
+    const key = usernameKey(username);
+    if (!key) { errorBox.textContent = "اسم مستخدم غير صالح."; return; }
+
     try {
-      const uid = await createStaffAuthAccount(email, password);
+      const existing = await get(ref(db, `usernames/${key}`));
+      if (existing.exists()) { errorBox.textContent = "اسم المستخدم ده متاخد بالفعل."; return; }
+
+      const syntheticEmail = syntheticEmailFor(key, me.tenantId);
+      const uid = await createStaffAuthAccount(syntheticEmail, password);
       const updates = {};
-      updates[`accounts/${uid}`] = { tenantId: me.tenantId, role, branchId, name, email };
-      updates[t(`staff/${uid}`)] = { name, email, role, branchId };
+      updates[`accounts/${uid}`] = { tenantId: me.tenantId, role, branchId, name, username };
+      updates[`usernames/${key}`] = syntheticEmail;
+      updates[t(`staff/${uid}`)] = { name, username, role, branchId };
       updates[t(`branch_users_index/${branchId}/${uid}`)] = true;
       await update(ref(db), updates);
 
-      ["s-name", "s-email", "s-password"].forEach(id => document.getElementById(id).value = "");
+      ["s-name", "s-username", "s-password"].forEach(id => document.getElementById(id).value = "");
       await renderAccountsList();
     } catch (err) {
-      errorBox.textContent = err.code === "auth/email-already-in-use"
-        ? "يوجد حساب بهذا البريد بالفعل."
-        : `تعذّر إنشاء الحساب (${err.code || err.message}).`;
+      errorBox.textContent = `تعذّر إنشاء الحساب (${err.code || err.message}).`;
       console.error("create account failed", err);
     }
   };
