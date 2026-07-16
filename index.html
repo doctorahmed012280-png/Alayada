@@ -830,8 +830,21 @@ onAuthStateChanged(auth, async (user) => {
   try {
     let account = await loadMyAccount(user.uid);
     if (!account) {
-      // First time we see this Firebase Auth user → they signed up
-      // via Google, so provision a brand-new tenant/clinic for them.
+      // A missing account record means one of two very different things:
+      // (1) this is a real first-time Google sign-in → provision a new
+      //     clinic for them, or
+      // (2) this is a username/password STAFF account whose record got
+      //     deleted (e.g. the database was wiped) → NEVER auto-provision
+      //     a new clinic for these, or a secretary/doctor login turns
+      //     into an orphaned mini "clinic" of its own, silently split
+      //     off from the real one.
+      const isGoogleSignIn = user.providerData.some(p => p.providerId === "google.com");
+      if (!isGoogleSignIn) {
+        document.getElementById("error-msg").textContent =
+          "الحساب ده مش مربوط بأي عيادة حاليًا. اطلبي من صاحب/ة العيادة يعمل لك حساب جديد من الإعدادات.";
+        await signOut(auth);
+        return;
+      }
       account = await provisionNewTenant(user.uid, { name: user.displayName || "—", email: user.email || "—" });
     }
     me = { uid: user.uid, ...account };
