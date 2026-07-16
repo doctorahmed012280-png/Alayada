@@ -579,11 +579,13 @@ async function loadMyAccount(uid) {
 
 async function provisionNewTenant(uid, { name, email }) {
   const tenantId = uid; // owner's own uid doubles as the tenant id
-  const updates = {};
-  updates[`accounts/${uid}`] = { tenantId, role: "owner", branchId: "branch_01", name, email };
-  updates[`tenants/${tenantId}/branches/branch_01`] = { name: "الفرع الرئيسي", active: true };
-  await update(ref(db), updates);
-  return updates[`accounts/${uid}`];
+  const accountRecord = { tenantId, role: "owner", branchId: "branch_01", name, email };
+  // Written as two sequential calls (not one multi-location update) so the
+  // account record is fully committed before the tenant-scoped write, which
+  // depends on it, is evaluated by the security rules.
+  await set(ref(db, `accounts/${uid}`), accountRecord);
+  await set(ref(db, `tenants/${tenantId}/branches/branch_01`), { name: "الفرع الرئيسي", active: true });
+  return accountRecord;
 }
 
 /* ============================================================
