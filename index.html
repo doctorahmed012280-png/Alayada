@@ -254,7 +254,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           <h4>بيانات مريضة جديدة</h4>
           <div class="field-row">
             <div class="field"><label>الاسم</label><input id="p-name"></div>
-            <div class="field"><label>السن</label><input id="p-age" type="number"></div>
+            <div class="field"><label for="p-dob">تاريخ الميلاد (اختياري)</label><input id="p-dob" type="date"></div>
           </div>
           <div class="field-row">
             <div class="field"><label>الهاتف</label><input id="p-phone" type="tel"></div>
@@ -265,6 +265,11 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
               </select></div>
           </div>
           <div class="field"><label>جهة اتصال للطوارئ</label><input id="p-emergency" placeholder="الاسم — الهاتف"></div>
+          <div class="field-row">
+            <div class="field"><label>المحافظة (اختياري)</label><input id="p-governorate" placeholder="مثال: القاهرة"></div>
+            <div class="field"><label>المدينة/الحي (اختياري)</label><input id="p-city" placeholder="مثال: مدينة نصر"></div>
+          </div>
+          <div class="field"><label>الشارع/تفاصيل العنوان (اختياري)</label><input id="p-street" placeholder="اسم الشارع ورقم العقار"></div>
           <div class="field"><label>بيانات إضافية (اختياري)</label></div>
           <div id="p-cf-list"></div>
           <button type="button" class="btn btn-ghost btn-sm" id="p-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
@@ -553,6 +558,36 @@ function formatArabicDate(ts) {
 function formatTime(ts) {
   if (!ts) return "—";
   return new Date(ts).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+}
+/* Age is derived from the stored birth date at display time (not
+   saved as a static number), so it stays correct every time the
+   patient's file is opened, however long since she was registered. */
+function calcAgeFromDob(dob, asOf = new Date()) {
+  const d = new Date(dob + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  let years = asOf.getFullYear() - d.getFullYear();
+  const hadBirthdayThisYear = (asOf.getMonth() > d.getMonth()) ||
+    (asOf.getMonth() === d.getMonth() && asOf.getDate() >= d.getDate());
+  if (!hadBirthdayThisYear) years--;
+  return years >= 0 ? years : null;
+}
+/* Older patient records may only have a static "age" number (before
+   birth-date tracking existed) — prefer the live-computed age from
+   dob, and fall back to that legacy field so no existing data breaks. */
+function displayAge(patient) {
+  if (patient.dob) {
+    const years = calcAgeFromDob(patient.dob);
+    return years != null ? years : "—";
+  }
+  return patient.age ?? "—";
+}
+/* Address may be stored as split fields (governorate/city/street) or,
+   for patients registered before this update, as a single legacy
+   "address" string — both are supported so nothing old breaks. */
+function displayAddress(patient) {
+  const parts = [patient.governorate, patient.city, patient.street].filter(Boolean);
+  if (parts.length) return parts.join(" — ");
+  return patient.address || "—";
 }
 const QUEUE_STATUS_LABELS = { "waiting": "في الانتظار", "in-clinic": "داخل الكشف", "done": "تم الكشف", "cancelled": "ملغي" };
 function todayKey() { return new Date().toISOString().slice(0, 10); }
@@ -1222,7 +1257,7 @@ function wireQueuePanel() {
     recalcPayment();
     paymentBox.style.display = "";
 
-    foundBox.innerHTML = `<strong>${patient.name}</strong> — ${patient.age ?? "—"} سنة` +
+    foundBox.innerHTML = `<strong>${patient.name}</strong> — ${displayAge(patient)} سنة` +
       (lastFoundAppointment ? `<div style="color:var(--primary);margin-top:4px;">✓ عندها حجز لليوم — هيتأكد تلقائيًا عند التسجيل</div>` : "");
   });
 
@@ -1273,22 +1308,26 @@ function wirePatientsPanel() {
     resultBox.className = "";
     resultBox.innerHTML = `<h4 style="margin-top:0">${patient.name}</h4>
       <div class="mono" style="color:var(--ink-soft);margin-bottom:8px;">${patient.phone}</div>
-      <div>السن: ${patient.age ?? "—"} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
+      <div>السن: ${displayAge(patient)} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
       <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>
+      <div>العنوان: ${displayAddress(patient)}</div>
       ${renderCustomFieldsView(patient.customFields)}`;
   });
   document.getElementById("p-create-btn").onclick = async () => {
     const name = document.getElementById("p-name").value.trim();
     const phone = document.getElementById("p-phone").value.trim();
-    const age = Number(document.getElementById("p-age").value) || null;
+    const dob = document.getElementById("p-dob").value || null;
     const bloodType = document.getElementById("p-blood").value;
     const emergencyContact = document.getElementById("p-emergency").value.trim();
+    const governorate = document.getElementById("p-governorate").value.trim();
+    const city = document.getElementById("p-city").value.trim();
+    const street = document.getElementById("p-street").value.trim();
     const customFields = readCustomFields("p-cf-list");
     if (!name || !phone) { alert("الاسم ورقم الهاتف مطلوبان."); return; }
     if (await findPatientByPhone(phone)) { alert("توجد بالفعل مريضة بهذا الرقم."); return; }
-    await createPatient(me.branchId, { name, phone, age, bloodType, emergencyContact, customFields });
+    await createPatient(me.branchId, { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields });
     alert("تم حفظ بيانات المريضة.");
-    ["p-name", "p-phone", "p-age", "p-emergency"].forEach(id => document.getElementById(id).value = "");
+    ["p-name", "p-phone", "p-dob", "p-emergency", "p-governorate", "p-city", "p-street"].forEach(id => document.getElementById(id).value = "");
     clearCustomFields("p-cf-list");
   };
 }
@@ -1440,7 +1479,7 @@ async function openPatientChart(patientId, queueId) {
   if (!pSnap.exists()) return;
   const patient = pSnap.val();
   document.getElementById("c-name").textContent = patient.name;
-  document.getElementById("c-meta").textContent = `${patient.phone || "—"} · ${patient.age ?? "—"} سنة · ${patient.bloodType ?? "—"}`;
+  document.getElementById("c-meta").textContent = `${patient.phone || "—"} · ${displayAge(patient)} سنة · ${patient.bloodType ?? "—"}`;
   const oh = patient.obstetricHistory || {};
   document.getElementById("c-obstetric").innerHTML = Object.keys(oh).length
     ? `<span class="mono">G${oh.gravida??0} P${oh.para??0} A${oh.abortions??0} L${oh.livingChildren??0}</span>` : "";
