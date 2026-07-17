@@ -222,7 +222,19 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           <div id="q-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div id="q-patient-found" class="empty-state" style="display:none;"></div>
           <div class="field"><label for="q-doctor">الطبيب المعالج</label><select id="q-doctor"></select></div>
-          <button class="btn btn-primary" id="q-checkin-btn">تسجيل في الدور</button>
+          <div id="q-payment-box" style="display:none;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <strong id="q-visit-type-label" style="color:var(--primary-d);">—</strong>
+              <span class="num" id="q-base-amount">0 ج.م</span>
+            </div>
+            <div class="field-row" id="q-discount-row" style="display:none;">
+              <div class="field"><label>نوع الخصم</label>
+                <select id="q-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
+              <div class="field"><label>قيمة الخصم</label><input id="q-discount-value" type="number" value="0" class="num"></div>
+            </div>
+            <div class="field" style="margin-bottom:0;"><label>الإجمالي المطلوب دفعه</label><input id="q-final-amount" class="num" readonly></div>
+          </div>
+          <button class="btn btn-primary" id="q-checkin-btn">تسجيل الدفع والدخول للدور</button>
         </div>
         <div class="panel">
           <h3>دور اليوم</h3>
@@ -278,7 +290,12 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           </div>
           <div class="field"><label>بند إضافي (اختياري)</label><input id="b-extra-label" placeholder="الوصف"></div>
           <div class="field"><label>قيمة البند الإضافي</label><input id="b-extra-value" type="number" value="0" class="num"></div>
-          <div class="field"><label>الإجمالي</label><input id="b-total" class="num" readonly></div>
+          <div class="field-row" id="b-discount-row" style="display:none;">
+            <div class="field"><label>نوع الخصم</label>
+              <select id="b-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
+            <div class="field"><label>قيمة الخصم</label><input id="b-discount-value" type="number" value="0" class="num"></div>
+          </div>
+          <div class="field"><label>الإجمالي بعد الخصم</label><input id="b-total" class="num" readonly></div>
           <div class="field"><label>بيانات إضافية (اختياري)</label></div>
           <div id="b-cf-list"></div>
           <button type="button" class="btn btn-ghost btn-sm" id="b-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
@@ -360,6 +377,40 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
             <ul class="timeline" id="anc-visits" style="margin-top:16px;"></ul>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== DOCTOR: financial management (visible to doctor/owner only) ===== -->
+    <section id="doc-view-finance" style="display:none;">
+      <div class="grid-2">
+        <div class="panel">
+          <h3>أسعار الزيارات</h3>
+          <div class="field"><label for="f-consult-price">سعر الكشف (ج.م)</label><input id="f-consult-price" type="number" class="num" value="0"></div>
+          <div class="field"><label for="f-followup-price">سعر الإعادة (ج.م)</label><input id="f-followup-price" type="number" class="num" value="0"></div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:14px 0;">
+            <input type="checkbox" id="f-discount-toggle" style="width:18px;height:18px;">
+            تفعيل نظام الخصم (يظهر للسكرتارية عند التحصيل)
+          </label>
+          <div class="field"><label for="f-max-discount">أقصى نسبة خصم مسموحة (%)</label><input id="f-max-discount" type="number" class="num" value="100"></div>
+          <button class="btn btn-primary" id="f-save-btn">حفظ الإعدادات المالية</button>
+          <div class="error-msg" id="f-save-msg"></div>
+        </div>
+        <div class="panel">
+          <h3>ملخص الإيرادات</h3>
+          <div class="field-row">
+            <div class="field"><label>إيراد اليوم</label><input id="f-today-total" class="num" readonly></div>
+            <div class="field"><label>إيراد هذا الشهر</label><input id="f-month-total" class="num" readonly></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>عدد الكشوفات (الشهر)</label><input id="f-month-consult-count" class="num" readonly></div>
+            <div class="field"><label>عدد الإعادات (الشهر)</label><input id="f-month-followup-count" class="num" readonly></div>
+          </div>
+          <div class="field"><label>إجمالي الخصومات الممنوحة (الشهر)</label><input id="f-month-discounts" class="num" readonly></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>آخر الفواتير — كل الفروع</h3>
+        <ul class="timeline" id="f-invoices-list"><li class="empty-state">جاري التحميل…</li></ul>
       </div>
     </section>
 
@@ -740,9 +791,9 @@ function subscribeBranchInvoices(branchId, callback) {
    read; upcoming/all-dates views fall back to reading the whole
    node and filtering client-side (fine at clinic scale).
    ============================================================ */
-async function bookAppointment(date, { patientId, patientName, doctorId, bookedBy }) {
+async function bookAppointment(date, { patientId, patientName, doctorId, bookedBy, visitType = "followup", price = 0 }) {
   const newRef = push(ref(db, t(`appointments/${date}`)));
-  await set(newRef, { patientId, patientName, doctorId, bookedBy, confirmed: false, createdAt: serverTimestamp() });
+  await set(newRef, { patientId, patientName, doctorId, bookedBy, visitType, price, confirmed: false, paid: false, createdAt: serverTimestamp() });
   return newRef.key;
 }
 function subscribeAppointmentsForDate(date, callback) {
@@ -754,8 +805,11 @@ function subscribeAppointmentsForDate(date, callback) {
   });
   return () => off(aRef, "value", handler);
 }
-async function confirmAppointment(date, apptId, queueId) {
-  await update(ref(db, t(`appointments/${date}/${apptId}`)), { confirmed: true, confirmedAt: serverTimestamp(), queueId: queueId || null });
+async function confirmAppointment(date, apptId, queueId, invoiceId) {
+  await update(ref(db, t(`appointments/${date}/${apptId}`)), {
+    confirmed: true, confirmedAt: serverTimestamp(), queueId: queueId || null,
+    paid: !!invoiceId, invoiceId: invoiceId || null
+  });
 }
 /* Any appointment booked for `patientId` today, not yet confirmed —
    used at check-in to auto-confirm instead of creating a stray extra
@@ -820,6 +874,72 @@ async function getClinicSettings() {
 }
 async function setClinicSetting(key, value) {
   await update(ref(db, t("settings")), { [key]: value });
+}
+
+/* ============================================================
+   FINANCE: pricing + discount system
+   Consultation/follow-up prices and the discount toggle live in
+   the same per-tenant "settings" node above. Cached locally after
+   login so the queue/billing screens don't re-fetch on every
+   keystroke; refreshed whenever the doctor saves new values.
+   ============================================================ */
+let clinicSettingsCache = {};
+async function refreshClinicSettingsCache() {
+  clinicSettingsCache = await getClinicSettings();
+  return clinicSettingsCache;
+}
+function priceFor(visitType) {
+  return Number(clinicSettingsCache[visitType === "consultation" ? "consultPrice" : "followupPrice"]) || 0;
+}
+function isDiscountEnabled() { return clinicSettingsCache.discountEnabled !== false; }
+function maxDiscountPercent() { return Number(clinicSettingsCache.maxDiscountPercent) || 100; }
+/* Computes the amount actually owed after an optional discount.
+   Clamped so a discount can never exceed the base amount (fixed)
+   or the doctor-configured ceiling (percent). */
+function computeDiscount(baseAmount, discountType, discountValue) {
+  const base = Number(baseAmount) || 0;
+  let value = Number(discountValue) || 0;
+  let discountAmount = 0;
+  if (discountType === "percent") {
+    value = Math.min(value, maxDiscountPercent());
+    discountAmount = Math.round(base * value / 100);
+  } else if (discountType === "fixed") {
+    discountAmount = value;
+  }
+  discountAmount = Math.max(0, Math.min(discountAmount, base));
+  return { discountAmount, finalAmount: base - discountAmount };
+}
+/* Creates the invoice for a consultation/follow-up visit payment,
+   collected at check-in (new booking arrival or same-day walk-in). */
+async function chargeVisitPayment({ branchId, patientId, patientName, visitType, baseAmount, discountType, discountValue, cashierUid }) {
+  const { discountAmount, finalAmount } = computeDiscount(baseAmount, discountType, discountValue);
+  const invoiceId = await createInvoice(branchId, {
+    patientId, patientName,
+    visitType,
+    items: { [visitType === "consultation" ? "الكشف" : "الإعادة"]: Number(baseAmount) || 0 },
+    subtotal: Number(baseAmount) || 0,
+    discountType: discountAmount > 0 ? discountType : "none",
+    discountValue: discountAmount > 0 ? (Number(discountValue) || 0) : 0,
+    discountAmount,
+    total: finalAmount,
+    paid: true,
+    cashierUid
+  });
+  return { invoiceId, discountAmount, finalAmount };
+}
+/* Reads every branch's billing at once — fine at clinic scale —
+   for the doctor-only finance dashboard, which aggregates across
+   the whole tenant rather than one branch at a time. */
+async function loadAllInvoices() {
+  const snap = await get(ref(db, t("billing")));
+  if (!snap.exists()) return [];
+  const rows = [];
+  snap.forEach((branchSnap) => {
+    const branchId = branchSnap.key;
+    branchSnap.forEach((invSnap) => { rows.push({ id: invSnap.key, branchId, ...invSnap.val() }); });
+  });
+  rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  return rows;
 }
 
 /* ============================================================
@@ -985,7 +1105,7 @@ function showApp() {
    Renders the same nav items into both the desktop sidebar list
    and the mobile bottom bar, so both stay in sync automatically.
    ============================================================ */
-const ALL_SECTIONS = ["sec-view-queue", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "view-settings"];
+const ALL_SECTIONS = ["sec-view-queue", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-finance", "view-settings"];
 
 function showSection(id, title) {
   ALL_SECTIONS.forEach(s => document.getElementById(s).style.display = s === id ? "" : "none");
@@ -1020,11 +1140,13 @@ function buildSecretaryNav() {
 function buildDoctorNav(showSettings) {
   const items = [
     { target: "doc-view-queue", label: "دوري اليوم", short: "دوري", icon: "🕒" },
-    { target: "doc-view-chart", label: "ملف المريضة", short: "الملف", icon: "🩺" }
+    { target: "doc-view-chart", label: "ملف المريضة", short: "الملف", icon: "🩺" },
+    { target: "doc-view-finance", label: "الإدارة المالية", short: "المالية", icon: "💰" }
   ];
   if (showSettings) items.push({ target: "view-settings", label: "الإعدادات", short: "الإعدادات", icon: "⚙️" });
   buildNav(items);
   initDoctor();
+  initFinance();
   if (showSettings) initSettings();
 }
 
@@ -1034,6 +1156,7 @@ function buildDoctorNav(showSettings) {
 let lastFoundPatient = null;
 
 async function initSecretary() {
+  await refreshClinicSettingsCache();
   await loadDoctorsForBranch();
   unsubs.push(subscribeToTodayQueue(me.branchId, renderQueue));
   unsubs.push(subscribeBranchInvoices(me.branchId, renderBilling));
@@ -1061,22 +1184,64 @@ async function loadDoctorsForBranch() {
 function wireQueuePanel() {
   const phoneInput = document.getElementById("q-phone");
   const foundBox = document.getElementById("q-patient-found");
+  const paymentBox = document.getElementById("q-payment-box");
+  const visitTypeLabel = document.getElementById("q-visit-type-label");
+  const baseAmountEl = document.getElementById("q-base-amount");
+  const discountRow = document.getElementById("q-discount-row");
+  const discountType = document.getElementById("q-discount-type");
+  const discountValue = document.getElementById("q-discount-value");
+  const finalAmountEl = document.getElementById("q-final-amount");
   let lastFoundAppointment = null;
+  let currentVisitType = "consultation";
+  let currentBaseAmount = 0;
+
+  function recalcPayment() {
+    const { finalAmount } = computeDiscount(currentBaseAmount, discountType.value, discountValue.value);
+    finalAmountEl.value = `${finalAmount} ج.م`;
+  }
+  discountType.onchange = () => { discountValue.disabled = discountType.value === "none"; recalcPayment(); };
+  discountValue.oninput = recalcPayment;
+
   wireSmartPatientSearch("q-phone", "q-search-dropdown", async (patient) => {
     lastFoundPatient = patient;
     phoneInput.value = `${patient.name} — ${patient.phone}`;
     foundBox.style.display = "";
     lastFoundAppointment = await findTodaysUnconfirmedAppointment(patient.id);
+
+    if (lastFoundAppointment) {
+      currentVisitType = lastFoundAppointment.visitType || "followup";
+      currentBaseAmount = Number(lastFoundAppointment.price) || priceFor("followup");
+    } else {
+      currentVisitType = "consultation";
+      currentBaseAmount = priceFor("consultation");
+    }
+    visitTypeLabel.textContent = currentVisitType === "consultation" ? "ثمن الكشف" : "ثمن الإعادة";
+    baseAmountEl.textContent = `${currentBaseAmount} ج.م`;
+    discountRow.style.display = isDiscountEnabled() ? "" : "none";
+    discountType.value = "none"; discountValue.value = "0"; discountValue.disabled = true;
+    recalcPayment();
+    paymentBox.style.display = "";
+
     foundBox.innerHTML = `<strong>${patient.name}</strong> — ${patient.age ?? "—"} سنة` +
       (lastFoundAppointment ? `<div style="color:var(--primary);margin-top:4px;">✓ عندها حجز لليوم — هيتأكد تلقائيًا عند التسجيل</div>` : "");
   });
+
   document.getElementById("q-checkin-btn").onclick = async () => {
     if (!lastFoundPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
     const doctorId = document.getElementById("q-doctor").value;
     if (!doctorId) { alert("اختاري الطبيب المعالج."); return; }
+
+    const { invoiceId } = await chargeVisitPayment({
+      branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name,
+      visitType: currentVisitType, baseAmount: currentBaseAmount,
+      discountType: discountType.value, discountValue: discountValue.value, cashierUid: me.uid
+    });
+
     const queueId = await checkInPatient({ branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name, doctorId, createdBy: me.uid });
-    if (lastFoundAppointment) { await confirmAppointment(lastFoundAppointment.date, lastFoundAppointment.id, queueId); }
-    phoneInput.value = ""; foundBox.style.display = "none"; lastFoundPatient = null; lastFoundAppointment = null;
+    if (lastFoundAppointment) { await confirmAppointment(lastFoundAppointment.date, lastFoundAppointment.id, queueId, invoiceId); }
+
+    phoneInput.value = ""; foundBox.style.display = "none"; paymentBox.style.display = "none";
+    lastFoundPatient = null; lastFoundAppointment = null;
   };
 }
 
@@ -1132,8 +1297,18 @@ function wireBillingPanel() {
   wireCustomFieldsWidget("b-cf-list", "b-cf-add");
   const consult = document.getElementById("b-consult"), sono = document.getElementById("b-sono");
   const extraVal = document.getElementById("b-extra-value"), total = document.getElementById("b-total");
-  function recalc() { total.value = (Number(consult.value)||0) + (Number(sono.value)||0) + (Number(extraVal.value)||0); }
+  const discountRow = document.getElementById("b-discount-row");
+  const discountType = document.getElementById("b-discount-type"), discountValue = document.getElementById("b-discount-value");
+  discountRow.style.display = isDiscountEnabled() ? "" : "none";
+  function subtotal() { return (Number(consult.value)||0) + (Number(sono.value)||0) + (Number(extraVal.value)||0); }
+  function recalc() {
+    const { finalAmount } = computeDiscount(subtotal(), discountType.value, discountValue.value);
+    total.value = finalAmount;
+  }
   [consult, sono, extraVal].forEach(el => el.oninput = recalc);
+  discountType.onchange = () => { discountValue.disabled = discountType.value === "none"; recalc(); };
+  discountValue.oninput = recalc;
+  discountValue.disabled = true;
   recalc();
   let selectedBillingPatient = null;
   wireSmartPatientSearch("b-phone", "b-search-dropdown", (patient) => {
@@ -1147,12 +1322,22 @@ function wireBillingPanel() {
     const extraLabel = document.getElementById("b-extra-label").value.trim();
     if (extraLabel) items[extraLabel] = Number(extraVal.value) || 0;
     const customFields = readCustomFields("b-cf-list");
-    await createInvoice(me.branchId, { patientId: patient.id, patientName: patient.name, items, total: Number(total.value)||0, paid: true, cashierUid: me.uid, customFields });
+    const { discountAmount, finalAmount } = computeDiscount(subtotal(), discountType.value, discountValue.value);
+    await createInvoice(me.branchId, {
+      patientId: patient.id, patientName: patient.name, items, visitType: "manual",
+      subtotal: subtotal(),
+      discountType: discountAmount > 0 ? discountType.value : "none",
+      discountValue: discountAmount > 0 ? (Number(discountValue.value)||0) : 0,
+      discountAmount,
+      total: finalAmount, paid: true, cashierUid: me.uid, customFields
+    });
     alert("تم إصدار الفاتورة.");
     document.getElementById("b-phone").value = "";
     selectedBillingPatient = null;
     document.getElementById("b-extra-label").value = "";
-    consult.value = "0"; sono.value = "0"; extraVal.value = "0"; recalc();
+    consult.value = "0"; sono.value = "0"; extraVal.value = "0";
+    discountType.value = "none"; discountValue.value = "0"; discountValue.disabled = true;
+    recalc();
     clearCustomFields("b-cf-list");
   };
 }
@@ -1163,8 +1348,10 @@ function renderBilling(rows) {
   list.innerHTML = "";
   rows.slice(0, 30).forEach(row => {
     const li = document.createElement("li");
+    const visitLabel = row.visitType === "consultation" ? "كشف" : (row.visitType === "followup" ? "إعادة" : "");
     li.innerHTML = `<div class="t-date">${formatTime(row.timestamp)}</div>
-      <div class="t-body"><strong>${row.patientName}</strong> — <span class="num">${row.total} ج.م</span>
+      <div class="t-body"><strong>${row.patientName}</strong> ${visitLabel ? `<span class="mono" style="color:var(--ink-soft);">(${visitLabel})</span>` : ""} — <span class="num">${row.total} ج.م</span>
+      ${row.discountAmount ? `<span style="color:var(--accent);"> (خصم ${row.discountAmount} ج.م)</span>` : ""}
       ${renderCustomFieldsView(row.customFields)}</div>`;
     list.appendChild(li);
   });
@@ -1182,7 +1369,7 @@ function initDoctor() {
   wireAncPanel();
   wireAbbrevReference();
   loadAndRenderDoctorAppointments();
-  getClinicSettings().then(s => { clinicAncEnabled = s.ancEnabled !== false; });
+  refreshClinicSettingsCache().then(s => { clinicAncEnabled = s.ancEnabled !== false; });
 }
 
 function wireAbbrevReference() {
@@ -1309,7 +1496,10 @@ function wireExamPanel() {
     };
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
     if (nextVisitDate) {
-      await bookAppointment(nextVisitDate, { patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid });
+      await bookAppointment(nextVisitDate, {
+        patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid,
+        visitType: "followup", price: priceFor("followup")
+      });
     }
     alert(nextVisitDate ? "تم حفظ الكشف وحجز الزيارة القادمة." : "تم حفظ الكشف وإنهاء الزيارة.");
     currentQueueId = null;
@@ -1369,6 +1559,84 @@ function wireAncPanel() {
     });
     ["anc-note","anc-weight","anc-lab"].forEach(id => document.getElementById(id).value = "");
     clearCustomFields("anc-cf-list");
+  };
+}
+
+/* ============================================================
+   FINANCE MODULE (doctor/owner only)
+   Lets the doctor set consultation/follow-up prices, toggle the
+   discount system, and see revenue collected across all branches.
+   Never wired for the "secretary" role — buildSecretaryNav() has
+   no finance nav item and never calls initFinance().
+   ============================================================ */
+let financeWired = false;
+
+async function initFinance() {
+  await refreshClinicSettingsCache();
+  document.getElementById("f-consult-price").value = clinicSettingsCache.consultPrice || 0;
+  document.getElementById("f-followup-price").value = clinicSettingsCache.followupPrice || 0;
+  document.getElementById("f-discount-toggle").checked = clinicSettingsCache.discountEnabled !== false;
+  document.getElementById("f-max-discount").value = clinicSettingsCache.maxDiscountPercent || 100;
+  if (!financeWired) { wireFinancePanel(); financeWired = true; }
+  await renderFinanceSummary();
+}
+
+async function renderFinanceSummary() {
+  const rows = await loadAllInvoices();
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+  let todayTotal = 0, monthTotal = 0, monthConsultCount = 0, monthFollowupCount = 0, monthDiscounts = 0;
+  rows.forEach(r => {
+    const ts = r.timestamp || 0;
+    if (ts >= todayStart) todayTotal += Number(r.total) || 0;
+    if (ts >= monthStart) {
+      monthTotal += Number(r.total) || 0;
+      monthDiscounts += Number(r.discountAmount) || 0;
+      if (r.visitType === "consultation") monthConsultCount++;
+      if (r.visitType === "followup") monthFollowupCount++;
+    }
+  });
+
+  document.getElementById("f-today-total").value = `${todayTotal} ج.م`;
+  document.getElementById("f-month-total").value = `${monthTotal} ج.م`;
+  document.getElementById("f-month-consult-count").value = monthConsultCount;
+  document.getElementById("f-month-followup-count").value = monthFollowupCount;
+  document.getElementById("f-month-discounts").value = `${monthDiscounts} ج.م`;
+
+  const list = document.getElementById("f-invoices-list");
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا توجد فواتير بعد</li>`; return; }
+  list.innerHTML = "";
+  rows.slice(0, 40).forEach(row => {
+    const visitLabel = row.visitType === "consultation" ? "كشف" : (row.visitType === "followup" ? "إعادة" : "فاتورة");
+    const li = document.createElement("li");
+    li.innerHTML = `<div class="t-date">${formatTime(row.timestamp)}</div>
+      <div class="t-body"><strong>${row.patientName}</strong> — <span class="mono" style="color:var(--ink-soft);">${visitLabel}</span>
+      — <span class="num">${row.total} ج.م</span>
+      ${row.discountAmount ? `<span style="color:var(--accent);"> (خصم ${row.discountAmount} ج.م)</span>` : ""}</div>`;
+    list.appendChild(li);
+  });
+}
+
+function wireFinancePanel() {
+  document.getElementById("f-save-btn").onclick = async () => {
+    const msg = document.getElementById("f-save-msg");
+    msg.textContent = "";
+    const consultPrice = Number(document.getElementById("f-consult-price").value) || 0;
+    const followupPrice = Number(document.getElementById("f-followup-price").value) || 0;
+    const discountEnabled = document.getElementById("f-discount-toggle").checked;
+    const maxDiscountPercentVal = Number(document.getElementById("f-max-discount").value) || 0;
+    try {
+      await update(ref(db, t("settings")), { consultPrice, followupPrice, discountEnabled, maxDiscountPercent: maxDiscountPercentVal });
+      await refreshClinicSettingsCache();
+      msg.style.color = "var(--primary)";
+      msg.textContent = "تم حفظ الإعدادات المالية.";
+    } catch (err) {
+      msg.style.color = "var(--st-cancelled)";
+      msg.textContent = "تعذّر الحفظ، حاولي مرة أخرى.";
+      console.error("save finance settings failed", err);
+    }
   };
 }
 
