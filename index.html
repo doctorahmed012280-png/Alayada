@@ -4,7 +4,166 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>الـعـيـادة — Al-Ayada</title>
-<link rel="stylesheet" href="styles.css">
+<style>
+/* ==========================================================================
+   Al-Ayada — Design System (inline, single-file build)
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=Tajawal:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --ink: #1F2A24; --ink-soft: #4B584F;
+  --canvas: #F5F1E8; --panel: #FFFFFF;
+  --primary: #2F5D50; --primary-d: #223F37;
+  --accent: #C97064; --bronze: #8E6C46; --line: #E4DDCC;
+  --st-waiting: #C9A227; --st-inclinic: #2F5D50; --st-done: #6B8F71; --st-cancelled: #A94442;
+  --radius: 14px; --radius-sm: 8px; --shadow: 0 4px 20px rgba(31, 42, 36, .07);
+}
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; background:var(--canvas); color:var(--ink); font-family:'Tajawal',sans-serif; direction:rtl; overflow-x:hidden; max-width:100vw; }
+h1,h2,h3,h4,.display { font-family:'Cairo',sans-serif; font-weight:800; color:var(--primary-d); margin:0 0 .3em; }
+h1 { font-size:clamp(1.15rem,4vw,1.6rem); }
+h2 { font-size:clamp(1.1rem,3.5vw,1.4rem); }
+h3 { font-size:clamp(1rem,3vw,1.15rem); }
+h4 { font-size:1rem; }
+.mono,.num { font-family:'IBM Plex Mono',monospace; }
+a { color:var(--primary); }
+button,input,select,textarea { font-family:inherit; font-size:inherit; }
+:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important;} }
+
+.app-shell { display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
+.sidebar { background:var(--primary-d); color:#F5F1E8; padding:28px 20px; display:flex; flex-direction:column; gap:28px; }
+.brand { font-family:'Cairo',sans-serif; font-weight:800; font-size:clamp(1.05rem,4vw,1.4rem); letter-spacing:.02em; }
+.brand span { color:var(--accent); }
+.nav-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.nav-list button { width:100%; text-align:right; background:none; border:none; color:#E9E4D6; padding:12px 14px; border-radius:var(--radius-sm); cursor:pointer; font-size:.98rem; transition:background .15s; }
+.nav-list button:hover,.nav-list button.active { background:rgba(245,241,232,.12); }
+.user-card { margin-top:auto; padding-top:16px; border-top:1px solid rgba(245,241,232,.15); font-size:.85rem; color:#C9C2AD; }
+.user-card strong { display:block; color:#F5F1E8; font-size:.95rem; margin-bottom:2px; }
+.user-card button { margin-top:10px; background:none; border:1px solid rgba(245,241,232,.3); color:#F5F1E8; padding:6px 12px; border-radius:var(--radius-sm); cursor:pointer; }
+.main { padding:32px 40px; overflow-y:auto; }
+.main-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+.main-header .date { color:var(--ink-soft); font-size:.95rem; }
+
+/* ---------------- Bottom nav (mobile only) ---------------- */
+.bottom-nav { display:none; }
+
+/* ---------------- Mobile layout ---------------- */
+@media (max-width:760px) {
+  .app-shell { grid-template-columns:1fr; }
+
+  .sidebar {
+    flex-direction:row; align-items:center; justify-content:space-between;
+    padding:12px 16px; gap:0; position:sticky; top:0; z-index:20;
+  }
+  .sidebar .nav-list { display:none; } /* replaced by bottom-nav on mobile */
+  .sidebar .brand { font-size:1.15rem; }
+  .user-card {
+    margin-top:0; padding-top:0; border-top:none;
+    display:flex; align-items:center; gap:10px; font-size:.72rem;
+  }
+  .user-card strong { display:inline; font-size:.85rem; }
+  .user-card span { display:none; } /* branch id hidden to save space on mobile */
+  .user-card button { margin-top:0; padding:6px 10px; font-size:.72rem; white-space:nowrap; }
+
+  .main { padding:18px 16px calc(90px + env(safe-area-inset-bottom)); }
+  .main-header h1 { font-size:1.25rem; }
+
+  .grid-2, .grid-3 { grid-template-columns:1fr; }
+  .field-row { grid-template-columns:1fr; }
+  .panel { padding:18px; border-radius:12px; }
+
+  .login-wrap { padding:16px; }
+  .login-card { width:100%; max-width:400px; padding:32px 24px; }
+
+  .bottom-nav {
+    display:flex; position:fixed; bottom:0; inset-inline:0; z-index:30;
+    background:var(--panel); border-top:1px solid var(--line);
+    box-shadow:0 -6px 20px rgba(31,42,36,.10);
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  .bottom-nav button {
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+    background:none; border:none; padding:8px 4px; border-radius:var(--radius-sm);
+    color:var(--ink-soft); font-size:.68rem; font-weight:600; cursor:pointer;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .bottom-nav button .bn-icon { font-size:1.3rem; line-height:1; }
+  .bottom-nav button.active { color:var(--primary); background:#EAF3EF; }
+
+  /* Full-width, easy-to-tap primary actions (small/ghost/danger buttons stay their natural size) */
+  .btn-primary:not(.btn-sm), .btn-accent:not(.btn-sm) { width:100%; justify-content:center; padding:13px 18px; }
+
+  /* Center and shrink the gestational-age ring so it doesn't crowd the patient header */
+  #c-ga-ring-wrap { width:100%; display:flex; justify-content:center; margin-top:8px; }
+  .ga-ring { width:104px; height:104px; }
+  .ga-ring .ga-weeks { font-size:1.3rem; }
+}
+
+@media (max-width:380px) {
+  .login-card { padding:26px 18px; }
+  .panel { padding:14px; }
+  .main { padding:14px 12px calc(90px + env(safe-area-inset-bottom)); }
+  .bottom-nav button { font-size:.62rem; padding:7px 2px; }
+  .bottom-nav button .bn-icon { font-size:1.15rem; }
+}
+
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); }
+.panel + .panel { margin-top:20px; }
+.grid-2 { display:grid; grid-template-columns:1.1fr .9fr; gap:20px; align-items:start; }
+@media (max-width:980px){ .grid-2{grid-template-columns:1fr;} }
+
+.btn { display:inline-flex; align-items:center; gap:6px; border:none; border-radius:var(--radius-sm); padding:10px 18px; font-weight:700; cursor:pointer; font-size:.93rem; transition:transform .1s,opacity .15s; }
+.btn:active { transform:scale(.98); }
+.btn-primary { background:var(--primary); color:#fff; }
+.btn-primary:hover { background:var(--primary-d); }
+.btn-accent { background:var(--accent); color:#fff; }
+.btn-accent:hover { opacity:.9; }
+.btn-ghost { background:transparent; color:var(--primary); border:1px solid var(--line); }
+.btn-ghost:hover { background:#F0EBDD; }
+.btn-sm { padding:6px 12px; font-size:.82rem; }
+.btn-danger { background:var(--st-cancelled); color:#fff; }
+
+.field { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+.field label { font-size:.85rem; color:var(--ink-soft); font-weight:500; }
+.field input,.field select,.field textarea { width:100%; border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 12px; background:#FBF9F4; color:var(--ink); font-size:16px; }
+.field input:focus,.field select:focus,.field textarea:focus { border-color:var(--primary); background:#fff; }
+.field-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+.queue-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+.queue-item { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; background:#FBF9F4; border-radius:var(--radius-sm); padding:14px 16px; border-inline-start:5px solid var(--st-waiting); }
+.queue-item[data-status="in-clinic"] { border-inline-start-color:var(--st-inclinic); }
+.queue-item[data-status="done"] { border-inline-start-color:var(--st-done); opacity:.7; }
+.queue-item[data-status="cancelled"] { border-inline-start-color:var(--st-cancelled); opacity:.55; text-decoration:line-through; }
+
+.badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:.78rem; font-weight:700; color:#fff; }
+.badge-waiting { background:var(--st-waiting); }
+.badge-in-clinic { background:var(--st-inclinic); }
+.badge-done { background:var(--st-done); }
+.badge-cancelled { background:var(--st-cancelled); }
+
+.ga-ring { --pct:0; width:132px; height:132px; border-radius:50%; background:conic-gradient(var(--accent) calc(var(--pct)*1%), #E9E1CE 0); display:flex; align-items:center; justify-content:center; position:relative; }
+.ga-ring::before { content:""; position:absolute; inset:10px; border-radius:50%; background:var(--panel); }
+.ga-ring .ga-label { position:relative; text-align:center; font-family:'Cairo',sans-serif; }
+.ga-ring .ga-weeks { font-size:1.6rem; font-weight:800; color:var(--primary-d); display:block; line-height:1.1; }
+.ga-ring .ga-caption { font-size:.68rem; color:var(--ink-soft); }
+
+.timeline { list-style:none; margin:0; padding:0; border-inline-start:2px solid var(--line); }
+.timeline li { position:relative; padding:4px 0 20px 22px; }
+.timeline li::before { content:""; position:absolute; right:-7px; top:8px; width:12px; height:12px; border-radius:50%; background:var(--primary); border:2px solid var(--panel); }
+.timeline .t-date { font-size:.78rem; color:var(--bronze); font-weight:600; }
+.timeline .t-body { margin-top:3px; }
+
+.login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at 30% 20%, #35695B 0%, var(--primary-d) 55%, #16241F 100%); }
+.login-card { background:var(--panel); border-radius:18px; padding:40px 36px; width:380px; box-shadow:0 20px 60px rgba(0,0,0,.35); }
+.login-brand { text-align:center; margin-bottom:22px; }
+.login-brand .display { font-size:clamp(1.5rem,8vw,1.9rem); }
+.login-brand .tag { color:var(--ink-soft); font-size:.9rem; }
+.error-msg { color:var(--st-cancelled); font-size:.85rem; min-height:1.2em; margin-top:4px; }
+
+.empty-state { text-align:center; color:var(--ink-soft); padding:28px 10px; }
+.empty-state .icon { font-size:1.8rem; margin-bottom:6px; }
+</style>
 </head>
 <body>
 
@@ -254,6 +413,1077 @@
   <nav class="bottom-nav" id="bottom-nav"></nav>
 </div>
 
-<script type="module" src="js/main.js"></script>
+<script type="module">
+/* ============================================================
+   FIREBASE INIT
+   ============================================================ */
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getDatabase, ref, push, set, update, get, onValue, off, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import {
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB6bmPP5DYP_EWtT1Amm_gL1k3Gh88GX8g",
+  authDomain: "alayada-72ca8.firebaseapp.com",
+  databaseURL: "https://alayada-72ca8-default-rtdb.firebaseio.com",
+  projectId: "alayada-72ca8",
+  storageBucket: "alayada-72ca8.firebasestorage.app",
+  messagingSenderId: "192838885817",
+  appId: "1:192838885817:web:2303bf9140342af4e3d668",
+  measurementId: "G-JHXV39EBF6"
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+
+/* ============================================================
+   USERNAME-BASED STAFF LOGIN
+   Firebase Auth only understands emails, so a username is turned
+   into a synthetic email under the hood (never a real inbox). A
+   public /usernames/{key} index maps it to that synthetic email
+   so the login screen can resolve it BEFORE the person is signed
+   in (i.e. before any tenant-scoped rule would apply).
+   ============================================================ */
+function usernameKey(username) {
+  return username.trim().toLowerCase().replace(/[.#$\[\]\/\s]/g, "_");
+}
+function syntheticEmailFor(usernameKeyValue, tenantId) {
+  return `${usernameKeyValue}.${tenantId}@staff.alayada.internal`;
+}
+
+/* Secondary app instance — used ONLY to create staff (secretary/doctor)
+   Firebase Auth accounts without kicking the clinic owner out of their
+   own session (createUserWithEmailAndPassword signs the caller in as
+   the new user by default, so we do it on an isolated app instance). */
+async function createStaffAuthAccount(email, password) {
+  const secondaryApp = initializeApp(firebaseConfig, "staff-creator-" + Date.now());
+  const secondaryAuth = getAuth(secondaryApp);
+  try {
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    return cred.user.uid;
+  } finally {
+    await signOut(secondaryAuth).catch(() => {});
+    await deleteApp(secondaryApp).catch(() => {});
+  }
+}
+
+/* ============================================================
+   UTILS (pure helpers)
+   ============================================================ */
+const MS_DAY = 24 * 60 * 60 * 1000;
+
+function calcEDD(lmp) {
+  const d = new Date(lmp + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  return new Date(d.getTime() + 280 * MS_DAY).toISOString().slice(0, 10);
+}
+function calcGestationalAge(lmp, asOf = new Date()) {
+  const start = new Date(lmp + "T00:00:00");
+  if (isNaN(start.getTime())) return null;
+  const diffMs = asOf.getTime() - start.getTime();
+  if (diffMs < 0) return { weeks: 0, days: 0, totalDays: 0 };
+  const totalDays = Math.floor(diffMs / MS_DAY);
+  return { weeks: Math.floor(totalDays / 7), days: totalDays % 7, totalDays };
+}
+function gestationProgress(lmp, asOf = new Date()) {
+  const ga = calcGestationalAge(lmp, asOf);
+  if (!ga) return 0;
+  return Math.min(1, ga.totalDays / (40 * 7));
+}
+function formatArabicDate(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  return d.toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" });
+}
+function formatTime(ts) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+}
+const QUEUE_STATUS_LABELS = { "waiting": "في الانتظار", "in-clinic": "داخل الكشف", "done": "تم الكشف", "cancelled": "ملغي" };
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+
+/* ============================================================
+   CUSTOM FIELDS WIDGET (reusable everywhere: patients, invoices,
+   visits, ANC). Lets the user add ad-hoc "label: value" rows for
+   data with no dedicated field, without touching the code.
+   ============================================================ */
+function customFieldsAddRow(listId, label = "", value = "") {
+  const wrap = document.getElementById(listId);
+  const row = document.createElement("div");
+  row.className = "field-row custom-field-row";
+  row.style.cssText = "align-items:flex-end;gap:8px;";
+  row.innerHTML = `
+    <div class="field" style="flex:1;margin-bottom:0;"><label>اسم الحقل</label><input class="cf-label" placeholder="مثال: رقم التأمين"></div>
+    <div class="field" style="flex:1;margin-bottom:0;"><label>القيمة</label><input class="cf-value"></div>
+    <button type="button" class="btn btn-ghost btn-sm cf-remove">حذف</button>`;
+  row.querySelector(".cf-label").value = label;
+  row.querySelector(".cf-value").value = value;
+  row.querySelector(".cf-remove").addEventListener("click", () => row.remove());
+  wrap.appendChild(row);
+}
+function wireCustomFieldsWidget(listId, addBtnId) {
+  document.getElementById(addBtnId).addEventListener("click", () => customFieldsAddRow(listId));
+}
+function readCustomFields(listId) {
+  const data = {};
+  document.querySelectorAll(`#${listId} .custom-field-row`).forEach(row => {
+    const label = row.querySelector(".cf-label").value.trim();
+    const value = row.querySelector(".cf-value").value.trim();
+    if (label) data[label] = value;
+  });
+  return data;
+}
+function clearCustomFields(listId) { document.getElementById(listId).innerHTML = ""; }
+function renderCustomFieldsView(data) {
+  if (!data || !Object.keys(data).length) return "";
+  return `<div style="margin-top:6px;font-size:.82rem;color:var(--ink-soft);">` +
+    Object.entries(data).map(([k, v]) => `<div>· <strong>${k}:</strong> ${v}</div>`).join("") +
+    `</div>`;
+}
+function customFieldsWidgetHtml(listId, addBtnId) {
+  return `<div class="field"><label>بيانات إضافية (اختياري)</label></div>
+    <div id="${listId}"></div>
+    <button type="button" class="btn btn-ghost btn-sm" id="${addBtnId}" style="margin-bottom:12px;">+ إضافة حقل</button>`;
+}
+
+/* ============================================================
+   SMART PATIENT SEARCH WIDGET (reusable: check-in, patients tab,
+   billing). Type a name (any part of it, Arabic-variant tolerant)
+   or any part of a phone number → live dropdown of matches.
+   ============================================================ */
+function wireSmartPatientSearch(inputId, dropdownId, onSelect) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  let debounceTimer = null;
+
+  function hideDropdown() { dropdown.style.display = "none"; dropdown.innerHTML = ""; }
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    const query = input.value.trim();
+    if (query.length < 2) { hideDropdown(); return; }
+    debounceTimer = setTimeout(async () => {
+      const results = await searchPatients(query);
+      if (!results.length) {
+        dropdown.innerHTML = `<div style="padding:10px 12px;color:var(--ink-soft);font-size:.85rem;">لا توجد نتائج</div>`;
+        dropdown.style.display = "";
+        return;
+      }
+      dropdown.innerHTML = results.map((p, i) => `
+        <div class="smart-search-item" data-i="${i}" style="padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;">
+          <strong>${p.name}</strong> <span class="mono" style="color:var(--ink-soft);font-size:.85rem;">${p.phone || ""}</span>
+        </div>`).join("");
+      dropdown.style.display = "";
+      dropdown.querySelectorAll(".smart-search-item").forEach(el => {
+        el.addEventListener("click", () => {
+          const patient = results[Number(el.dataset.i)];
+          hideDropdown();
+          onSelect(patient);
+        });
+      });
+    }, 250);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (e.target !== input && !dropdown.contains(e.target)) hideDropdown();
+  });
+}
+
+/* ============================================================
+   DATA LAYER
+   ============================================================ */
+/* All paths below are scoped under tenants/{me.tenantId}/... so one
+   clinic can never see another clinic's data — enforced both here
+   (convenience) and, critically, by the Security Rules on the server. */
+function t(path) { return `tenants/${me.tenantId}/${path}`; }
+
+async function findPatientByPhone(phone) {
+  const idxSnap = await get(ref(db, t(`patients_search_index/${phone}`)));
+  if (!idxSnap.exists()) return null;
+  const patientId = idxSnap.val();
+  const pSnap = await get(ref(db, t(`patients/${patientId}`)));
+  return pSnap.exists() ? { id: patientId, ...pSnap.val() } : null;
+}
+
+/* Normalizes Arabic text for forgiving search: strips diacritics/
+   tatweel, unifies common letter variants (أ/إ/آ → ا, ى → ي, ة → ه),
+   collapses whitespace. Lets "احمد", "أحمد", "آحمد" all match. */
+function normalizeArabic(str) {
+  return (str || "").toString()
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, "")
+    .replace(/[إأآا]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/* Smart search: matches by (partial) name OR (partial) phone digits,
+   anywhere in the string — not just an exact/prefix match. Reads the
+   whole patients list for the tenant once per call; fine for a
+   single clinic's patient volume. */
+async function searchPatients(query) {
+  const qName = normalizeArabic(query);
+  const qDigits = (query || "").replace(/\D/g, "");
+  if (!qName && !qDigits) return [];
+  const snap = await get(ref(db, t("patients")));
+  if (!snap.exists()) return [];
+  const results = [];
+  snap.forEach((child) => {
+    const p = child.val();
+    const nameNorm = normalizeArabic(p.name);
+    const nameMatch = qName && nameNorm.includes(qName);
+    const phoneMatch = qDigits.length >= 3 && (p.phone || "").includes(qDigits);
+    if (nameMatch || phoneMatch) results.push({ id: child.key, ...p, _startsWith: nameNorm.startsWith(qName) });
+  });
+  results.sort((a, b) => (a._startsWith === b._startsWith ? 0 : a._startsWith ? -1 : 1));
+  return results.slice(0, 8);
+}
+async function createPatient(branchId, data) {
+  const newRef = push(ref(db, t("patients")));
+  const patientId = newRef.key;
+  const updates = {};
+  updates[t(`patients/${patientId}`)] = { ...data, createdBranchId: branchId, createdAt: serverTimestamp() };
+  updates[t(`patients_search_index/${data.phone}`)] = patientId;
+  await update(ref(db), updates);
+  return patientId;
+}
+async function checkInPatient({ branchId, patientId, patientName, doctorId, createdBy }) {
+  const date = todayKey();
+  const queueRef = push(ref(db, t(`queue/${branchId}/${date}`)));
+  const notifRef = push(ref(db, t(`notifications/${branchId}/${doctorId}`)));
+  const updates = {};
+  updates[t(`queue/${branchId}/${date}/${queueRef.key}`)] = {
+    patientId, patientName, doctorId, status: "waiting",
+    checkInTime: serverTimestamp(), calledTime: null, createdBy: createdBy || null
+  };
+  updates[t(`notifications/${branchId}/${doctorId}/${notifRef.key}`)] = {
+    type: "new_queue_entry", patientId, patientName, queueId: queueRef.key,
+    timestamp: serverTimestamp(), read: false
+  };
+  await update(ref(db), updates);
+  return queueRef.key;
+}
+function subscribeToTodayQueue(branchId, callback) {
+  const date = todayKey();
+  const qRef = ref(db, t(`queue/${branchId}/${date}`));
+  const handler = onValue(qRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    rows.sort((a, b) => (a.checkInTime || 0) - (b.checkInTime || 0));
+    callback(rows);
+  });
+  return () => off(qRef, "value", handler);
+}
+async function setQueueStatus(branchId, queueId, status) {
+  const patch = { status };
+  if (status === "in-clinic") patch.calledTime = serverTimestamp();
+  await update(ref(db, t(`queue/${branchId}/${todayKey()}/${queueId}`)), patch);
+}
+function subscribePatientTimeline(patientId, callback) {
+  const rRef = ref(db, t(`medicalRecords/${patientId}`));
+  const handler = onValue(rRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    callback(rows);
+  });
+  return () => off(rRef, "value", handler);
+}
+async function completeVisit({ branchId, patientId, doctorId, queueId, record }) {
+  const recRef = push(ref(db, t(`medicalRecords/${patientId}`)));
+  const updates = {};
+  updates[t(`medicalRecords/${patientId}/${recRef.key}`)] = { branchId, doctorId, date: todayKey(), ...record, createdAt: serverTimestamp() };
+  if (queueId) updates[t(`queue/${branchId}/${todayKey()}/${queueId}/status`)] = "done";
+  await update(ref(db), updates);
+  return recRef.key;
+}
+function subscribeAncRecord(patientId, pregnancyId, callback) {
+  const aRef = ref(db, t(`ancRecords/${patientId}/${pregnancyId}`));
+  const handler = onValue(aRef, (snap) => callback(snap.exists() ? snap.val() : null));
+  return () => off(aRef, "value", handler);
+}
+async function startAncRecord(patientId, branchId, { lmp, edd }) {
+  const newRef = push(ref(db, t(`ancRecords/${patientId}`)));
+  await set(newRef, { lmp, edd, startBranchId: branchId, visits: {} });
+  return newRef.key;
+}
+async function addAncVisit(patientId, pregnancyId, visit) {
+  const newRef = push(ref(db, t(`ancRecords/${patientId}/${pregnancyId}/visits`)));
+  await set(newRef, { ...visit, createdAt: serverTimestamp() });
+  return newRef.key;
+}
+async function createInvoice(branchId, invoice) {
+  const newRef = push(ref(db, t(`billing/${branchId}`)));
+  await set(newRef, { ...invoice, timestamp: serverTimestamp() });
+  return newRef.key;
+}
+function subscribeBranchInvoices(branchId, callback) {
+  const bRef = ref(db, t(`billing/${branchId}`));
+  const handler = onValue(bRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    rows.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    callback(rows);
+  });
+  return () => off(bRef, "value", handler);
+}
+
+/* ============================================================
+   APPOINTMENTS (next-visit booking + arrival confirmation)
+   Stored per-date so "today's appointments" is a cheap direct
+   read; upcoming/all-dates views fall back to reading the whole
+   node and filtering client-side (fine at clinic scale).
+   ============================================================ */
+async function bookAppointment(date, { patientId, patientName, doctorId, bookedBy }) {
+  const newRef = push(ref(db, t(`appointments/${date}`)));
+  await set(newRef, { patientId, patientName, doctorId, bookedBy, confirmed: false, createdAt: serverTimestamp() });
+  return newRef.key;
+}
+function subscribeAppointmentsForDate(date, callback) {
+  const aRef = ref(db, t(`appointments/${date}`));
+  const handler = onValue(aRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    callback(rows);
+  });
+  return () => off(aRef, "value", handler);
+}
+async function confirmAppointment(date, apptId, queueId) {
+  await update(ref(db, t(`appointments/${date}/${apptId}`)), { confirmed: true, confirmedAt: serverTimestamp(), queueId: queueId || null });
+}
+/* Any appointment booked for `patientId` today, not yet confirmed —
+   used at check-in to auto-confirm instead of creating a stray extra
+   booking record. */
+async function findTodaysUnconfirmedAppointment(patientId) {
+  const snap = await get(ref(db, t(`appointments/${todayKey()}`)));
+  if (!snap.exists()) return null;
+  let found = null;
+  snap.forEach((child) => {
+    const v = child.val();
+    if (v.patientId === patientId && !v.confirmed) { found = { id: child.key, ...v }; }
+  });
+  return found;
+}
+/* Loads every appointment for one doctor across all dates (today's
+   arrivals excluded by the caller if needed) — used to build the
+   "today, not yet arrived" and "upcoming" lists on the doctor's screen. */
+async function loadDoctorAppointments(doctorId) {
+  const snap = await get(ref(db, t("appointments")));
+  if (!snap.exists()) return [];
+  const result = [];
+  snap.forEach((dateSnap) => {
+    const date = dateSnap.key;
+    dateSnap.forEach((apptSnap) => {
+      const v = apptSnap.val();
+      if (v.doctorId === doctorId) result.push({ id: apptSnap.key, date, ...v });
+    });
+  });
+  return result;
+}
+
+/* ============================================================
+   MEDICAL ABBREVIATIONS DICTIONARY (doctor-managed, per clinic)
+   A quick-reference list the doctor builds from الإعدادات so their
+   own shorthand ("ANC", "ttt"...) stays legible without hardcoding
+   any specialty into the app itself.
+   ============================================================ */
+async function addAbbreviation(abbr, meaning) {
+  const newRef = push(ref(db, t("abbreviations")));
+  await set(newRef, { abbr, meaning });
+  return newRef.key;
+}
+async function deleteAbbreviation(id) {
+  await set(ref(db, t(`abbreviations/${id}`)), null);
+}
+function subscribeAbbreviations(callback) {
+  const aRef = ref(db, t("abbreviations"));
+  const handler = onValue(aRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    callback(rows);
+  });
+  return () => off(aRef, "value", handler);
+}
+
+/* ============================================================
+   CLINIC SETTINGS (per-tenant toggles, e.g. optional ANC module)
+   ============================================================ */
+async function getClinicSettings() {
+  const snap = await get(ref(db, t("settings")));
+  return snap.exists() ? snap.val() : {};
+}
+async function setClinicSetting(key, value) {
+  await update(ref(db, t("settings")), { [key]: value });
+}
+
+/* ============================================================
+   MULTI-TENANCY MODEL
+   Every clinic ("tenant") gets its own slice of the database at
+   /tenants/{tenantId}/... A tiny root-level pointer at
+   /accounts/{uid} = { tenantId, role, branchId, name, email }
+   is what Security Rules use to figure out which tenant a given
+   signed-in Firebase Auth user belongs to. This pointer node is
+   the ONLY thing that lives outside a tenant's own subtree.
+
+   - role "owner"     → the person who signed up with Google;
+                         can manage staff from الإعدادات.
+   - role "secretary"/"doctor" → created BY an owner from
+                         الإعدادات with email+password (real
+                         Firebase Auth accounts, not custom hashes).
+   ============================================================ */
+async function loadMyAccount(uid) {
+  const snap = await get(ref(db, `accounts/${uid}`));
+  return snap.exists() ? snap.val() : null;
+}
+
+async function provisionNewTenant(uid, { name, email }) {
+  const tenantId = uid; // owner's own uid doubles as the tenant id
+  const accountRecord = { tenantId, role: "owner", branchId: "branch_01", name, email };
+  // Written as two sequential calls (not one multi-location update) so the
+  // account record is fully committed before the tenant-scoped writes,
+  // which depend on it, are evaluated by the security rules.
+  await set(ref(db, `accounts/${uid}`), accountRecord);
+  const updates = {};
+  updates[`tenants/${tenantId}/branches/branch_01`] = { name: "الفرع الرئيسي", active: true };
+  // The owner also acts as the clinic's doctor, so they need a tenant-scoped
+  // staff record too — that's the only thing the secretary's account is
+  // allowed to read (root-level /accounts/{uid} is private to its own uid),
+  // and it's what populates the "الطبيب المعالج" dropdown at check-in.
+  updates[`tenants/${tenantId}/staff/${uid}`] = { name, username: email, role: "owner", branchId: "branch_01" };
+  updates[`tenants/${tenantId}/branch_users_index/branch_01/${uid}`] = true;
+  await update(ref(db), updates);
+  return accountRecord;
+}
+
+/* Backward-compatibility self-heal: clinics provisioned before the fix
+   above are missing their own owner from tenants/{id}/staff, so the
+   doctor dropdown looks empty to their secretary. Runs harmlessly (no-op)
+   for clinics that already have it. */
+async function ensureOwnerStaffRecord() {
+  if (me.role !== "owner") return;
+  const snap = await get(ref(db, t(`staff/${me.uid}`)));
+  if (snap.exists()) return;
+  const updates = {};
+  updates[t(`staff/${me.uid}`)] = { name: me.name, username: me.email, role: "owner", branchId: me.branchId };
+  updates[t(`branch_users_index/${me.branchId}/${me.uid}`)] = true;
+  await update(ref(db), updates);
+}
+
+/* ============================================================
+   APP STATE + LOGIN
+   Firebase Auth now owns the session, so a page refresh keeps
+   you logged in (onAuthStateChanged below restores `me`).
+   ============================================================ */
+let me = null; // { uid, tenantId, role, branchId, name, email }
+let unsubs = []; // active realtime listeners, torn down on logout/nav
+
+document.getElementById("today-date").textContent = formatArabicDate();
+
+document.getElementById("google-signin-btn").addEventListener("click", async () => {
+  const errBox = document.getElementById("google-error-msg");
+  errBox.textContent = "";
+  try {
+    await signInWithPopup(auth, googleProvider);
+    // onAuthStateChanged below picks it up from here
+  } catch (err) {
+    // Popups get blocked/cancelled a lot on mobile browsers — fall back
+    // to a full-page redirect flow instead of just failing.
+    const popupIssue = ["auth/cancelled-popup-request", "auth/popup-blocked", "auth/popup-closed-by-user"].includes(err.code);
+    if (popupIssue) {
+      try { await signInWithRedirect(auth, googleProvider); return; } catch (err2) {
+        errBox.textContent = `تعذّر الدخول بجوجل (${err2.code || err2.message}).`;
+        console.error("google redirect sign-in error", err2);
+        return;
+      }
+    }
+    errBox.textContent = `تعذّر الدخول بجوجل (${err.code || err.message}).`;
+    console.error("google sign-in error", err);
+  }
+});
+
+// Picks up the result after a redirect-based Google sign-in (page reload).
+getRedirectResult(auth).catch((err) => {
+  console.error("google redirect result error", err);
+  document.getElementById("google-error-msg").textContent = `تعذّر الدخول بجوجل (${err.code || err.message}).`;
+});
+
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errorMsg = document.getElementById("error-msg");
+  errorMsg.textContent = "";
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+  try {
+    const key = usernameKey(username);
+    const idxSnap = await get(ref(db, `usernames/${key}`));
+    if (!idxSnap.exists()) { errorMsg.textContent = "اسم المستخدم غير صحيح."; return; }
+    await signInWithEmailAndPassword(auth, idxSnap.val(), password);
+    // onAuthStateChanged below picks it up from here
+  } catch (err) {
+    errorMsg.textContent = err.code === "auth/invalid-credential"
+      ? "اسم المستخدم أو كلمة المرور غير صحيحة."
+      : `تعذّر تسجيل الدخول (${err.code || err.message}).`;
+    console.error("login error", err);
+  }
+});
+
+document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+
+onAuthStateChanged(auth, async (user) => {
+  unsubs.forEach(u => u());
+  unsubs = [];
+  if (!user) { me = null; document.getElementById("screen-login").style.display = ""; document.getElementById("screen-app").style.display = "none"; return; }
+
+  try {
+    let account = await loadMyAccount(user.uid);
+    if (!account) {
+      // A missing account record means one of two very different things:
+      // (1) this is a real first-time Google sign-in → provision a new
+      //     clinic for them, or
+      // (2) this is a username/password STAFF account whose record got
+      //     deleted (e.g. the database was wiped) → NEVER auto-provision
+      //     a new clinic for these, or a secretary/doctor login turns
+      //     into an orphaned mini "clinic" of its own, silently split
+      //     off from the real one.
+      const isGoogleSignIn = user.providerData.some(p => p.providerId === "google.com");
+      if (!isGoogleSignIn) {
+        document.getElementById("error-msg").textContent =
+          "الحساب ده مش مربوط بأي عيادة حاليًا. اطلبي من صاحب/ة العيادة يعمل لك حساب جديد من الإعدادات.";
+        await signOut(auth);
+        return;
+      }
+      account = await provisionNewTenant(user.uid, { name: user.displayName || "—", email: user.email || "—" });
+    }
+    me = { uid: user.uid, ...account };
+    showApp();
+  } catch (err) {
+    console.error("account load failed", err);
+    document.getElementById("google-error-msg").textContent = `تعذّر تحميل الحساب (${err.code || err.message}).`;
+    await signOut(auth);
+  }
+});
+
+function showApp() {
+  document.getElementById("screen-login").style.display = "none";
+  document.getElementById("screen-app").style.display = "";
+  document.getElementById("user-name").textContent = me.name || "—";
+  document.getElementById("user-branch").textContent = me.branchId || "—";
+  ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
+  if (me.role === "owner") buildDoctorNav(true);
+  else if (me.role === "doctor") buildDoctorNav(false);
+  else if (me.role === "secretary") buildSecretaryNav();
+}
+
+/* ============================================================
+   NAV / VIEW SWITCHING
+   Renders the same nav items into both the desktop sidebar list
+   and the mobile bottom bar, so both stay in sync automatically.
+   ============================================================ */
+const ALL_SECTIONS = ["sec-view-queue", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "view-settings"];
+
+function showSection(id, title) {
+  ALL_SECTIONS.forEach(s => document.getElementById(s).style.display = s === id ? "" : "none");
+  document.getElementById("view-title").textContent = title;
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.target === id));
+}
+
+function buildNav(items) {
+  const navList = document.getElementById("nav-list");
+  const bottomNav = document.getElementById("bottom-nav");
+  navList.innerHTML = items.map(it =>
+    `<li><button class="nav-btn" data-target="${it.target}">${it.label}</button></li>`
+  ).join("");
+  bottomNav.innerHTML = items.map(it =>
+    `<button class="nav-btn" data-target="${it.target}"><span class="bn-icon">${it.icon}</span><span>${it.short || it.label}</span></button>`
+  ).join("");
+  document.querySelectorAll(".nav-btn").forEach(b =>
+    b.addEventListener("click", () => showSection(b.dataset.target, items.find(it => it.target === b.dataset.target).label))
+  );
+  showSection(items[0].target, items[0].label);
+}
+
+function buildSecretaryNav() {
+  buildNav([
+    { target: "sec-view-queue", label: "الدور اليومي", short: "الدور", icon: "🕒" },
+    { target: "sec-view-patients", label: "المرضى", short: "المرضى", icon: "👥" },
+    { target: "sec-view-billing", label: "الفواتير", short: "الفواتير", icon: "🧾" }
+  ]);
+  initSecretary();
+}
+
+function buildDoctorNav(showSettings) {
+  const items = [
+    { target: "doc-view-queue", label: "دوري اليوم", short: "دوري", icon: "🕒" },
+    { target: "doc-view-chart", label: "ملف المريضة", short: "الملف", icon: "🩺" }
+  ];
+  if (showSettings) items.push({ target: "view-settings", label: "الإعدادات", short: "الإعدادات", icon: "⚙️" });
+  buildNav(items);
+  initDoctor();
+  if (showSettings) initSettings();
+}
+
+/* ============================================================
+   SECRETARY MODULE
+   ============================================================ */
+let lastFoundPatient = null;
+
+async function initSecretary() {
+  await loadDoctorsForBranch();
+  unsubs.push(subscribeToTodayQueue(me.branchId, renderQueue));
+  unsubs.push(subscribeBranchInvoices(me.branchId, renderBilling));
+  wireQueuePanel();
+  wirePatientsPanel();
+  wireBillingPanel();
+}
+
+async function loadDoctorsForBranch() {
+  const sel = document.getElementById("q-doctor");
+  sel.innerHTML = "";
+  const idxSnap = await get(ref(db, t(`branch_users_index/${me.branchId}`)));
+  if (!idxSnap.exists()) { sel.innerHTML = "<option>لا يوجد أطباء بهذا الفرع</option>"; return; }
+  for (const uid of Object.keys(idxSnap.val())) {
+    const uSnap = await get(ref(db, t(`staff/${uid}`)));
+    if (uSnap.exists() && (uSnap.val().role === "doctor" || uSnap.val().role === "owner")) {
+      const opt = document.createElement("option");
+      opt.value = uid; opt.textContent = uSnap.val().name;
+      sel.appendChild(opt);
+    }
+  }
+  if (!sel.children.length) sel.innerHTML = "<option>لا يوجد أطباء بهذا الفرع</option>";
+}
+
+function wireQueuePanel() {
+  const phoneInput = document.getElementById("q-phone");
+  const foundBox = document.getElementById("q-patient-found");
+  let lastFoundAppointment = null;
+  wireSmartPatientSearch("q-phone", "q-search-dropdown", async (patient) => {
+    lastFoundPatient = patient;
+    phoneInput.value = `${patient.name} — ${patient.phone}`;
+    foundBox.style.display = "";
+    lastFoundAppointment = await findTodaysUnconfirmedAppointment(patient.id);
+    foundBox.innerHTML = `<strong>${patient.name}</strong> — ${patient.age ?? "—"} سنة` +
+      (lastFoundAppointment ? `<div style="color:var(--primary);margin-top:4px;">✓ عندها حجز لليوم — هيتأكد تلقائيًا عند التسجيل</div>` : "");
+  });
+  document.getElementById("q-checkin-btn").onclick = async () => {
+    if (!lastFoundPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
+    const doctorId = document.getElementById("q-doctor").value;
+    if (!doctorId) { alert("اختاري الطبيب المعالج."); return; }
+    const queueId = await checkInPatient({ branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name, doctorId, createdBy: me.uid });
+    if (lastFoundAppointment) { await confirmAppointment(lastFoundAppointment.date, lastFoundAppointment.id, queueId); }
+    phoneInput.value = ""; foundBox.style.display = "none"; lastFoundPatient = null; lastFoundAppointment = null;
+  };
+}
+
+function renderQueue(rows) {
+  const list = document.getElementById("queue-list");
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في الدور بعد</li>`; return; }
+  list.innerHTML = "";
+  rows.forEach(row => {
+    const li = document.createElement("li");
+    li.className = "queue-item"; li.dataset.status = row.status;
+    li.innerHTML = `
+      <div><strong>${row.patientName || "—"}</strong>
+        <div style="font-size:.8rem;color:var(--ink-soft)">دخول: ${formatTime(row.checkInTime)}</div></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="badge badge-${row.status}">${QUEUE_STATUS_LABELS[row.status] || row.status}</span>
+        ${row.status === "waiting" ? `<button class="btn btn-ghost btn-sm" data-act="cancel">إلغاء</button>` : ""}
+      </div>`;
+    const cancelBtn = li.querySelector('[data-act="cancel"]');
+    if (cancelBtn) cancelBtn.onclick = () => setQueueStatus(me.branchId, row.id, "cancelled");
+    list.appendChild(li);
+  });
+}
+
+function wirePatientsPanel() {
+  wireCustomFieldsWidget("p-cf-list", "p-cf-add");
+  const resultBox = document.getElementById("p-result");
+  wireSmartPatientSearch("p-search", "p-search-dropdown", (patient) => {
+    document.getElementById("p-search").value = `${patient.name} — ${patient.phone}`;
+    resultBox.className = "";
+    resultBox.innerHTML = `<h4 style="margin-top:0">${patient.name}</h4>
+      <div class="mono" style="color:var(--ink-soft);margin-bottom:8px;">${patient.phone}</div>
+      <div>السن: ${patient.age ?? "—"} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
+      <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>
+      ${renderCustomFieldsView(patient.customFields)}`;
+  });
+  document.getElementById("p-create-btn").onclick = async () => {
+    const name = document.getElementById("p-name").value.trim();
+    const phone = document.getElementById("p-phone").value.trim();
+    const age = Number(document.getElementById("p-age").value) || null;
+    const bloodType = document.getElementById("p-blood").value;
+    const emergencyContact = document.getElementById("p-emergency").value.trim();
+    const customFields = readCustomFields("p-cf-list");
+    if (!name || !phone) { alert("الاسم ورقم الهاتف مطلوبان."); return; }
+    if (await findPatientByPhone(phone)) { alert("توجد بالفعل مريضة بهذا الرقم."); return; }
+    await createPatient(me.branchId, { name, phone, age, bloodType, emergencyContact, customFields });
+    alert("تم حفظ بيانات المريضة.");
+    ["p-name", "p-phone", "p-age", "p-emergency"].forEach(id => document.getElementById(id).value = "");
+    clearCustomFields("p-cf-list");
+  };
+}
+
+function wireBillingPanel() {
+  wireCustomFieldsWidget("b-cf-list", "b-cf-add");
+  const consult = document.getElementById("b-consult"), sono = document.getElementById("b-sono");
+  const extraVal = document.getElementById("b-extra-value"), total = document.getElementById("b-total");
+  function recalc() { total.value = (Number(consult.value)||0) + (Number(sono.value)||0) + (Number(extraVal.value)||0); }
+  [consult, sono, extraVal].forEach(el => el.oninput = recalc);
+  recalc();
+  let selectedBillingPatient = null;
+  wireSmartPatientSearch("b-phone", "b-search-dropdown", (patient) => {
+    selectedBillingPatient = patient;
+    document.getElementById("b-phone").value = `${patient.name} — ${patient.phone}`;
+  });
+  document.getElementById("b-create-btn").onclick = async () => {
+    if (!selectedBillingPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
+    const patient = selectedBillingPatient;
+    const items = { consultation: Number(consult.value)||0, ultrasound: Number(sono.value)||0 };
+    const extraLabel = document.getElementById("b-extra-label").value.trim();
+    if (extraLabel) items[extraLabel] = Number(extraVal.value) || 0;
+    const customFields = readCustomFields("b-cf-list");
+    await createInvoice(me.branchId, { patientId: patient.id, patientName: patient.name, items, total: Number(total.value)||0, paid: true, cashierUid: me.uid, customFields });
+    alert("تم إصدار الفاتورة.");
+    document.getElementById("b-phone").value = "";
+    selectedBillingPatient = null;
+    document.getElementById("b-extra-label").value = "";
+    consult.value = "0"; sono.value = "0"; extraVal.value = "0"; recalc();
+    clearCustomFields("b-cf-list");
+  };
+}
+
+function renderBilling(rows) {
+  const list = document.getElementById("billing-list");
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا توجد فواتير بعد</li>`; return; }
+  list.innerHTML = "";
+  rows.slice(0, 30).forEach(row => {
+    const li = document.createElement("li");
+    li.innerHTML = `<div class="t-date">${formatTime(row.timestamp)}</div>
+      <div class="t-body"><strong>${row.patientName}</strong> — <span class="num">${row.total} ج.م</span>
+      ${renderCustomFieldsView(row.customFields)}</div>`;
+    list.appendChild(li);
+  });
+}
+
+/* ============================================================
+   DOCTOR MODULE
+   ============================================================ */
+let currentPatientId = null, currentQueueId = null, currentPregnancyId = null, currentLmp = null;
+let clinicAncEnabled = true;
+
+function initDoctor() {
+  unsubs.push(subscribeToTodayQueue(me.branchId, renderDoctorQueue));
+  wireExamPanel();
+  wireAncPanel();
+  wireAbbrevReference();
+  loadAndRenderDoctorAppointments();
+  getClinicSettings().then(s => { clinicAncEnabled = s.ancEnabled !== false; });
+}
+
+function wireAbbrevReference() {
+  const box = document.getElementById("v-abbrev-ref");
+  unsubs.push(subscribeAbbreviations((rows) => {
+    if (!rows.length) { box.style.display = "none"; return; }
+    box.style.display = "";
+    box.innerHTML = `<strong>مرجع الاختصارات (دوسي عشان تضيفيها للملاحظة):</strong><br>` +
+      rows.map(a => `<span class="mono" style="cursor:pointer;text-decoration:underline dotted;margin-inline-end:10px;" data-abbr="${a.abbr}" title="${a.meaning}">${a.abbr}</span>`).join(" ");
+    box.querySelectorAll("[data-abbr]").forEach(el => {
+      el.addEventListener("click", () => {
+        const note = document.getElementById("v-note");
+        note.value += (note.value ? " " : "") + el.dataset.abbr;
+        note.focus();
+      });
+    });
+  }));
+}
+
+async function loadAndRenderDoctorAppointments() {
+  const all = await loadDoctorAppointments(me.uid);
+  const today = todayKey();
+  renderApptList("doc-appts-today-list", all.filter(a => a.date === today && !a.confirmed), false);
+  renderApptList("doc-appts-upcoming-list", all.filter(a => a.date > today).sort((a, b) => a.date.localeCompare(b.date)), true);
+}
+function renderApptList(listId, rows, showDate) {
+  const list = document.getElementById(listId);
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">${showDate ? "لا توجد حجوزات قادمة" : "لا يوجد حجوزات لليوم"}</li>`; return; }
+  list.innerHTML = "";
+  rows.forEach(a => {
+    const li = document.createElement("li");
+    li.innerHTML = `<div><strong>${a.patientName}</strong>${showDate ? ` <span class="mono" style="color:var(--ink-soft);">— ${a.date}</span>` : ""}</div>`;
+    list.appendChild(li);
+  });
+}
+
+function renderDoctorQueue(rows) {
+  const mine = rows.filter(r => r.doctorId === me.uid && r.status !== "cancelled");
+  const list = document.getElementById("doc-queue-list");
+  if (!mine.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في دورك الآن</li>`; return; }
+  list.innerHTML = "";
+  mine.forEach(row => {
+    const li = document.createElement("li");
+    li.className = "queue-item"; li.dataset.status = row.status;
+    li.innerHTML = `
+      <div><strong>${row.patientName || "—"}</strong>
+        <div style="font-size:.8rem;color:var(--ink-soft)">دخول: ${formatTime(row.checkInTime)}</div></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="badge badge-${row.status}">${QUEUE_STATUS_LABELS[row.status] || row.status}</span>
+        ${row.status === "waiting" ? `<button class="btn btn-primary btn-sm" data-act="call">استدعاء</button>` : ""}
+        ${row.status === "in-clinic" ? `<button class="btn btn-ghost btn-sm" data-act="open">فتح الملف</button>` : ""}
+      </div>`;
+    const callBtn = li.querySelector('[data-act="call"]');
+    if (callBtn) callBtn.onclick = async () => { await setQueueStatus(me.branchId, row.id, "in-clinic"); openPatientChart(row.patientId, row.id); };
+    const openBtn = li.querySelector('[data-act="open"]');
+    if (openBtn) openBtn.onclick = () => openPatientChart(row.patientId, row.id);
+    list.appendChild(li);
+  });
+}
+
+async function openPatientChart(patientId, queueId) {
+  currentPatientId = patientId; currentQueueId = queueId || null; currentPregnancyId = null; currentLmp = null;
+  showSection("doc-view-chart", "ملف المريضة");
+  document.getElementById("chart-empty").style.display = "none";
+  document.getElementById("chart-content").style.display = "";
+
+  const pSnap = await get(ref(db, t(`patients/${patientId}`)));
+  if (!pSnap.exists()) return;
+  const patient = pSnap.val();
+  document.getElementById("c-name").textContent = patient.name;
+  document.getElementById("c-meta").textContent = `${patient.phone || "—"} · ${patient.age ?? "—"} سنة · ${patient.bloodType ?? "—"}`;
+  const oh = patient.obstetricHistory || {};
+  document.getElementById("c-obstetric").innerHTML = Object.keys(oh).length
+    ? `<span class="mono">G${oh.gravida??0} P${oh.para??0} A${oh.abortions??0} L${oh.livingChildren??0}</span>` : "";
+
+  document.getElementById("v-note").value = "";
+  document.getElementById("v-next-visit").value = "";
+  document.getElementById("anc-panel").style.display = clinicAncEnabled ? "" : "none";
+  unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
+
+  if (!clinicAncEnabled) { renderAnc(null); return; }
+  const ancListSnap = await get(ref(db, t(`ancRecords/${patientId}`)));
+  if (ancListSnap.exists()) {
+    const entries = Object.entries(ancListSnap.val());
+    const [pregId] = entries[entries.length - 1];
+    currentPregnancyId = pregId;
+    unsubs.push(subscribeAncRecord(patientId, pregId, renderAnc));
+  } else {
+    renderAnc(null);
+  }
+}
+
+function renderTimeline(rows) {
+  const list = document.getElementById("c-timeline");
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا توجد زيارات سابقة</li>`; return; }
+  list.innerHTML = "";
+  rows.forEach(r => {
+    const li = document.createElement("li");
+    const oldFormat = r.diagnosis || r.symptoms || r.ultrasoundFindings || r.prescription;
+    li.innerHTML = `<div class="t-date">${r.date || "—"}${r.nextVisitDate ? ` — الزيارة القادمة: ${r.nextVisitDate}` : ""}</div>
+      <div class="t-body">
+        ${r.note ? r.note.replace(/\n/g, "<br>") : ""}
+        ${oldFormat ? `
+          ${r.diagnosis ? `<strong>${r.diagnosis}</strong><br>` : ""}
+          ${r.symptoms ? `الأعراض: ${r.symptoms}<br>` : ""}
+          ${r.ultrasoundFindings ? `سونار: ${r.ultrasoundFindings}<br>` : ""}
+          ${r.prescription ? `روشتة: ${r.prescription}` : ""}` : ""}
+      </div>
+      ${renderCustomFieldsView(r.customFields)}`;
+    list.appendChild(li);
+  });
+}
+
+function wireExamPanel() {
+  wireCustomFieldsWidget("v-cf-list", "v-cf-add");
+  document.getElementById("v-complete-btn").onclick = async () => {
+    if (!currentPatientId) return;
+    const patientName = document.getElementById("c-name").textContent;
+    const nextVisitDate = document.getElementById("v-next-visit").value || null;
+    const record = {
+      note: document.getElementById("v-note").value.trim(),
+      nextVisitDate,
+      customFields: readCustomFields("v-cf-list")
+    };
+    await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
+    if (nextVisitDate) {
+      await bookAppointment(nextVisitDate, { patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid });
+    }
+    alert(nextVisitDate ? "تم حفظ الكشف وحجز الزيارة القادمة." : "تم حفظ الكشف وإنهاء الزيارة.");
+    currentQueueId = null;
+    document.getElementById("v-note").value = "";
+    document.getElementById("v-next-visit").value = "";
+    clearCustomFields("v-cf-list");
+    loadAndRenderDoctorAppointments();
+  };
+}
+
+function renderAnc(ancData) {
+  const startBox = document.getElementById("anc-start"), trackBox = document.getElementById("anc-tracking");
+  const ringWrap = document.getElementById("c-ga-ring-wrap");
+  if (!ancData) { startBox.style.display = ""; trackBox.style.display = "none"; ringWrap.innerHTML = ""; return; }
+  startBox.style.display = "none"; trackBox.style.display = ""; currentLmp = ancData.lmp;
+  const ga = calcGestationalAge(ancData.lmp);
+  const pct = Math.round(gestationProgress(ancData.lmp) * 100);
+  ringWrap.innerHTML = `<div class="ga-ring" style="--pct:${pct}"><div class="ga-label">
+      <span class="ga-weeks">${ga.weeks}<span style="font-size:1rem">w</span>${ga.days}<span style="font-size:1rem">d</span></span>
+      <span class="ga-caption">EDD ${ancData.edd || "—"}</span></div></div>`;
+  const visits = ancData.visits ? Object.values(ancData.visits).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)) : [];
+  const list = document.getElementById("anc-visits");
+  if (!visits.length) { list.innerHTML = `<li class="empty-state">لا توجد زيارات متابعة بعد</li>`; return; }
+  list.innerHTML = "";
+  visits.forEach(v => {
+    const li = document.createElement("li");
+    li.innerHTML = `<div class="t-date">${v.gestationalWeek ?? "—"}wks · ${v.date || ""}</div>
+      <div class="t-body">${v.note || ""}
+        ${v.fetalWeightGrams ? ` — وزن الجنين: <span class="num">${v.fetalWeightGrams}g</span>` : ""}
+        ${v.lab ? ` — <span style="color:var(--accent)">${v.lab}</span>` : ""}
+        ${renderCustomFieldsView(v.customFields)}</div>`;
+    list.appendChild(li);
+  });
+}
+
+function wireAncPanel() {
+  wireCustomFieldsWidget("anc-cf-list", "anc-cf-add");
+  const lmpInput = document.getElementById("anc-lmp");
+  lmpInput.onchange = () => { document.getElementById("anc-edd").value = calcEDD(lmpInput.value) || ""; };
+  document.getElementById("anc-start-btn").onclick = async () => {
+    if (!currentPatientId) return;
+    const lmp = lmpInput.value;
+    if (!lmp) { alert("أدخلي تاريخ آخر دورة."); return; }
+    const edd = calcEDD(lmp);
+    currentPregnancyId = await startAncRecord(currentPatientId, me.branchId, { lmp, edd });
+    unsubs.push(subscribeAncRecord(currentPatientId, currentPregnancyId, renderAnc));
+  };
+  document.getElementById("anc-add-btn").onclick = async () => {
+    if (!currentPatientId || !currentPregnancyId) return;
+    const note = document.getElementById("anc-note").value.trim();
+    const fetalWeightGrams = Number(document.getElementById("anc-weight").value) || null;
+    const lab = document.getElementById("anc-lab").value.trim();
+    const ga = currentLmp ? calcGestationalAge(currentLmp) : null;
+    const customFields = readCustomFields("anc-cf-list");
+    await addAncVisit(currentPatientId, currentPregnancyId, {
+      note, fetalWeightGrams, lab: lab || null, gestationalWeek: ga ? ga.weeks : null, date: formatArabicDate(), customFields
+    });
+    ["anc-note","anc-weight","anc-lab"].forEach(id => document.getElementById(id).value = "");
+    clearCustomFields("anc-cf-list");
+  };
+}
+
+/* ============================================================
+   SETTINGS — shared by both roles: create secretary/doctor
+   accounts and list who already has one.
+   ============================================================ */
+let settingsWired = false;
+
+async function initSettings() {
+  await loadBranchesForSettings();
+  await renderAccountsList();
+  const settings = await getClinicSettings();
+  document.getElementById("s-anc-toggle").checked = settings.ancEnabled !== false; // default ON
+  if (!settingsWired) { wireSettingsPanel(); settingsWired = true; }
+}
+
+async function loadBranchesForSettings() {
+  const sel = document.getElementById("s-branch");
+  const snap = await get(ref(db, t("branches")));
+  sel.innerHTML = "";
+  if (snap.exists()) {
+    Object.entries(snap.val()).forEach(([id, b]) => {
+      const opt = document.createElement("option");
+      opt.value = id; opt.textContent = b.name || id;
+      sel.appendChild(opt);
+    });
+  } else {
+    sel.innerHTML = `<option value="branch_01">الفرع الرئيسي</option>`;
+  }
+}
+
+async function renderAccountsList() {
+  const list = document.getElementById("s-accounts-list");
+  const snap = await get(ref(db, t("staff")));
+  const rows = snap.exists() ? Object.entries(snap.val()).map(([id, u]) => ({ id, ...u })) : [];
+  // Older tenants provisioned before the self-heal fix might still be
+  // missing the owner from tenants/{id}/staff for a brief moment — cover
+  // that case without ever showing the owner twice.
+  if (!rows.some(u => u.id === me.uid)) {
+    rows.unshift({ id: me.uid, name: me.name, username: me.email, role: "owner", branchId: me.branchId });
+  }
+  list.innerHTML = "";
+  rows.forEach(u => {
+    const li = document.createElement("li");
+    const roleLabel = u.role === "doctor" ? "طبيب" : (u.role === "secretary" ? "سكرتارية" : "صاحب/ة العيادة");
+    li.innerHTML = `<div class="t-date">${roleLabel} — ${u.branchId || "—"}</div>
+      <div class="t-body"><strong>${u.name || "—"}</strong> — <span class="mono">${u.username || "—"}</span></div>`;
+    list.appendChild(li);
+  });
+}
+
+function wireSettingsPanel() {
+  document.getElementById("s-anc-toggle").addEventListener("change", (e) => {
+    setClinicSetting("ancEnabled", e.target.checked).catch(err => console.error("setClinicSetting failed", err));
+  });
+
+  const abList = document.getElementById("ab-list");
+  subscribeAbbreviations((rows) => {
+    if (!rows.length) { abList.innerHTML = `<li class="empty-state">لا توجد اختصارات بعد</li>`; return; }
+    abList.innerHTML = "";
+    rows.forEach(a => {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="t-body"><strong>${a.abbr}</strong> — ${a.meaning}
+        <button type="button" class="btn btn-ghost btn-sm ab-del" data-id="${a.id}" style="margin-right:8px;">حذف</button></div>`;
+      li.querySelector(".ab-del").addEventListener("click", () => deleteAbbreviation(a.id));
+      abList.appendChild(li);
+    });
+  });
+  document.getElementById("ab-add-btn").onclick = async () => {
+    const abbr = document.getElementById("ab-abbr").value.trim();
+    const meaning = document.getElementById("ab-meaning").value.trim();
+    if (!abbr || !meaning) return;
+    await addAbbreviation(abbr, meaning);
+    document.getElementById("ab-abbr").value = "";
+    document.getElementById("ab-meaning").value = "";
+  };
+
+  document.getElementById("s-create-btn").onclick = async () => {
+    const errorBox = document.getElementById("s-error");
+    errorBox.textContent = "";
+
+    const name = document.getElementById("s-name").value.trim();
+    const username = document.getElementById("s-username").value.trim();
+    const password = document.getElementById("s-password").value;
+    const role = document.getElementById("s-role").value;
+    const branchId = document.getElementById("s-branch").value;
+
+    if (!name || !username || !password) { errorBox.textContent = "من فضلك أكملي كل الحقول."; return; }
+    if (password.length < 6) { errorBox.textContent = "كلمة المرور 6 أحرف على الأقل."; return; }
+
+    const key = usernameKey(username);
+    if (!key) { errorBox.textContent = "اسم مستخدم غير صالح."; return; }
+
+    try {
+      const existing = await get(ref(db, `usernames/${key}`));
+      if (existing.exists()) { errorBox.textContent = "اسم المستخدم ده متاخد بالفعل."; return; }
+
+      const syntheticEmail = syntheticEmailFor(key, me.tenantId);
+      const uid = await createStaffAuthAccount(syntheticEmail, password);
+      const updates = {};
+      updates[`accounts/${uid}`] = { tenantId: me.tenantId, role, branchId, name, username };
+      updates[`usernames/${key}`] = syntheticEmail;
+      updates[t(`staff/${uid}`)] = { name, username, role, branchId };
+      updates[t(`branch_users_index/${branchId}/${uid}`)] = true;
+      await update(ref(db), updates);
+
+      ["s-name", "s-username", "s-password"].forEach(id => document.getElementById(id).value = "");
+      await renderAccountsList();
+    } catch (err) {
+      errorBox.textContent = `تعذّر إنشاء الحساب (${err.code || err.message}).`;
+      console.error("create account failed", err);
+    }
+  };
+}
+</script>
 </body>
 </html>
