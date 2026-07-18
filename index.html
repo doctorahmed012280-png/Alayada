@@ -266,8 +266,8 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           </div>
           <div class="field"><label>جهة اتصال للطوارئ</label><input id="p-emergency" placeholder="الاسم — الهاتف"></div>
           <div class="field-row">
-            <div class="field"><label>المحافظة (اختياري)</label><input id="p-governorate" placeholder="مثال: القاهرة"></div>
-            <div class="field"><label>المدينة/الحي (اختياري)</label><input id="p-city" placeholder="مثال: مدينة نصر"></div>
+            <div class="field"><label for="p-governorate">المحافظة (اختياري)</label><select id="p-governorate"></select></div>
+            <div class="field"><label for="p-city">المركز/الحي (اختياري)</label><select id="p-city"><option value="">اختاري المحافظة أولاً</option></select></div>
           </div>
           <div class="field"><label>الشارع/تفاصيل العنوان (اختياري)</label><input id="p-street" placeholder="اسم الشارع ورقم العقار"></div>
           <div class="field"><label>بيانات إضافية (اختياري)</label></div>
@@ -338,6 +338,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
             <div>
               <h2 id="c-name" style="margin-bottom:4px;">—</h2>
               <div class="mono" style="color:var(--ink-soft);" id="c-meta">—</div>
+              <div style="margin-top:4px;color:var(--ink-soft);font-size:.9rem;" id="c-address"></div>
               <div style="margin-top:8px;" id="c-obstetric"></div>
             </div>
             <div id="c-ga-ring-wrap"></div>
@@ -589,6 +590,63 @@ function displayAddress(patient) {
   if (parts.length) return parts.join(" — ");
   return patient.address || "—";
 }
+
+/* ============================================================
+   EGYPT GOVERNORATES / MARKAZ REFERENCE DATA
+   Static geographic reference list (does not change at runtime)
+   used to power the dependent "محافظة → مركز/حي" dropdowns on the
+   patient form. Kept as one plain object so adding/adjusting a
+   governorate's list later is a one-line change, not a redesign.
+   ============================================================ */
+const EGYPT_GOVERNORATES = {
+  "القاهرة": ["مدينة نصر", "مصر الجديدة", "المعادي", "حلوان", "الزيتون", "عين شمس", "شبرا", "الوايلي", "الساحل", "روض الفرج", "السيدة زينب", "مصر القديمة", "الخليفة", "الدرب الأحمر", "الجمالية", "باب الشرقية", "الأزبكية", "عابدين", "قصر النيل", "بولاق", "الأميرية", "النزهة", "المرج", "المطرية", "حدائق القبة", "التجمع الخامس", "المقطم"],
+  "الجيزة": ["الجيزة", "الدقي", "العجوزة", "إمبابة", "بولاق الدكرور", "أوسيم", "كرداسة", "أبو النمرس", "الحوامدية", "البدرشين", "الصف", "أطفيح", "منشأة القناطر", "الواحات البحرية", "6 أكتوبر", "الشيخ زايد"],
+  "الإسكندرية": ["المنتزه", "شرق", "وسط", "غرب", "الجمرك", "العامرية", "برج العرب", "العجمي"],
+  "الدقهلية": ["المنصورة", "طلخا", "ميت غمر", "دكرنس", "أجا", "منية النصر", "السنبلاوين", "شربين", "المنزلة", "بلقاس", "الجمالية", "تمي الأمديد", "نبروه", "بني عبيد", "المطرية", "الكردي"],
+  "الشرقية": ["الزقازيق", "بلبيس", "منيا القمح", "أبو حماد", "أبو كبير", "الحسينية", "ديرب نجم", "الصالحية الجديدة", "فاقوس", "القرين", "القنايات", "كفر صقر", "مشتول السوق", "ههيا", "أولاد صقر", "العاشر من رمضان", "الإبراهيمية"],
+  "القليوبية": ["بنها", "قليوب", "شبرا الخيمة", "القناطر الخيرية", "طوخ", "قها", "الخانكة", "كفر شكر", "العبور", "شبين القناطر"],
+  "البحيرة": ["دمنهور", "كفر الدوار", "رشيد", "إدكو", "أبو حمص", "أبو المطامير", "الدلنجات", "إيتاي البارود", "حوش عيسى", "شبراخيت", "كوم حمادة", "المحمودية", "النوبارية", "وادي النطرون", "بدر", "الرحمانية"],
+  "الغربية": ["طنطا", "المحلة الكبرى", "كفر الزيات", "زفتى", "السنطة", "سمنود", "بسيون", "قطور"],
+  "المنوفية": ["شبين الكوم", "منوف", "أشمون", "الباجور", "قويسنا", "تلا", "الشهداء", "بركة السبع", "السادات"],
+  "كفر الشيخ": ["كفر الشيخ", "دسوق", "فوه", "مطوبس", "بلطيم", "بيلا", "الحامول", "سيدي سالم", "الرياض", "قلين", "سيدي غازي", "برج البرلس"],
+  "الفيوم": ["الفيوم", "إطسا", "سنورس", "طامية", "يوسف الصديق", "أبشواي"],
+  "بني سويف": ["بني سويف", "الواسطى", "ناصر", "ببا", "سمسطا", "الفشن", "إهناسيا"],
+  "المنيا": ["المنيا", "ملوي", "سمالوط", "مغاغة", "بني مزار", "مطاي", "أبو قرقاص", "دير مواس", "العدوة"],
+  "أسيوط": ["أسيوط", "ديروط", "منفلوط", "أبنوب", "القوصية", "أبو تيج", "ساحل سليم", "البداري", "صدفا", "الغنايم", "الفتح الجديدة"],
+  "سوهاج": ["سوهاج", "أخميم", "جرجا", "طهطا", "طما", "المراغة", "البلينا", "جهينة", "ساقلته", "دار السلام", "المنشاة"],
+  "قنا": ["قنا", "نجع حمادي", "دشنا", "أبو تشت", "فرشوط", "قوص", "نقادة", "الوقف"],
+  "الأقصر": ["الأقصر", "الزينية", "البياضية", "إسنا", "القرنة", "أرمنت", "الطود"],
+  "أسوان": ["أسوان", "إدفو", "كوم أمبو", "دراو", "نصر النوبة", "كلابشة", "السباعية", "البصيلية"],
+  "البحر الأحمر": ["الغردقة", "رأس غارب", "سفاجا", "القصير", "مرسى علم", "الشلاتين", "حلايب"],
+  "الوادي الجديد": ["الخارجة", "الداخلة", "الفرافرة", "باريس"],
+  "مطروح": ["مرسى مطروح", "الحمام", "العلمين", "الضبعة", "النجيلة", "سيدي براني", "السلوم", "سيوة"],
+  "شمال سيناء": ["العريش", "الشيخ زويد", "رفح", "بئر العبد", "الحسنة", "نخل"],
+  "جنوب سيناء": ["الطور", "شرم الشيخ", "دهب", "نويبع", "طابا", "سانت كاترين", "أبو رديس", "أبو زنيمة"],
+  "بورسعيد": ["الشرق", "المناخ", "العرب", "الزهور", "الضواحي", "بورفؤاد"],
+  "الإسماعيلية": ["الإسماعيلية", "فايد", "القنطرة شرق", "القنطرة غرب", "التل الكبير", "القصاصين الجديدة", "أبو صوير"],
+  "السويس": ["عتاقة", "الأربعين", "فيصل", "الجناين", "السويس"],
+  "دمياط": ["دمياط", "دمياط الجديدة", "فارسكور", "الزرقا", "كفر سعد", "كفر البطيخ", "الروضة", "السرو", "كفر الشيخ عبد الله"]
+};
+/* Fills the governorate <select> with a blank placeholder + every
+   governorate name; called once when the patients panel is wired. */
+function populateGovernorateSelect(selectEl) {
+  selectEl.innerHTML = `<option value="">اختاري المحافظة (اختياري)</option>` +
+    Object.keys(EGYPT_GOVERNORATES).map(g => `<option value="${g}">${g}</option>`).join("");
+}
+/* Fills the مركز/حي <select> based on whichever governorate is
+   currently selected; disabled with a placeholder until one is. */
+function populateMarkazSelect(selectEl, governorate) {
+  const list = EGYPT_GOVERNORATES[governorate];
+  if (!list) {
+    selectEl.innerHTML = `<option value="">اختاري المحافظة أولاً</option>`;
+    selectEl.disabled = true;
+    return;
+  }
+  selectEl.disabled = false;
+  selectEl.innerHTML = `<option value="">اختاري المركز/الحي (اختياري)</option>` +
+    list.map(m => `<option value="${m}">${m}</option>`).join("");
+}
+
 const QUEUE_STATUS_LABELS = { "waiting": "في الانتظار", "in-clinic": "داخل الكشف", "done": "تم الكشف", "cancelled": "ملغي" };
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
@@ -1303,6 +1361,12 @@ function renderQueue(rows) {
 function wirePatientsPanel() {
   wireCustomFieldsWidget("p-cf-list", "p-cf-add");
   const resultBox = document.getElementById("p-result");
+  const governorateSelect = document.getElementById("p-governorate");
+  const citySelect = document.getElementById("p-city");
+  populateGovernorateSelect(governorateSelect);
+  populateMarkazSelect(citySelect, "");
+  governorateSelect.onchange = () => populateMarkazSelect(citySelect, governorateSelect.value);
+
   wireSmartPatientSearch("p-search", "p-search-dropdown", (patient) => {
     document.getElementById("p-search").value = `${patient.name} — ${patient.phone}`;
     resultBox.className = "";
@@ -1319,15 +1383,16 @@ function wirePatientsPanel() {
     const dob = document.getElementById("p-dob").value || null;
     const bloodType = document.getElementById("p-blood").value;
     const emergencyContact = document.getElementById("p-emergency").value.trim();
-    const governorate = document.getElementById("p-governorate").value.trim();
-    const city = document.getElementById("p-city").value.trim();
+    const governorate = governorateSelect.value || "";
+    const city = citySelect.value || "";
     const street = document.getElementById("p-street").value.trim();
     const customFields = readCustomFields("p-cf-list");
     if (!name || !phone) { alert("الاسم ورقم الهاتف مطلوبان."); return; }
     if (await findPatientByPhone(phone)) { alert("توجد بالفعل مريضة بهذا الرقم."); return; }
     await createPatient(me.branchId, { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields });
     alert("تم حفظ بيانات المريضة.");
-    ["p-name", "p-phone", "p-dob", "p-emergency", "p-governorate", "p-city", "p-street"].forEach(id => document.getElementById(id).value = "");
+    ["p-name", "p-phone", "p-dob", "p-emergency", "p-street"].forEach(id => document.getElementById(id).value = "");
+    governorateSelect.value = ""; populateMarkazSelect(citySelect, "");
     clearCustomFields("p-cf-list");
   };
 }
@@ -1480,6 +1545,8 @@ async function openPatientChart(patientId, queueId) {
   const patient = pSnap.val();
   document.getElementById("c-name").textContent = patient.name;
   document.getElementById("c-meta").textContent = `${patient.phone || "—"} · ${displayAge(patient)} سنة · ${patient.bloodType ?? "—"}`;
+  const addressLine = displayAddress(patient);
+  document.getElementById("c-address").textContent = addressLine !== "—" ? `📍 ${addressLine}` : "";
   const oh = patient.obstetricHistory || {};
   document.getElementById("c-obstetric").innerHTML = Object.keys(oh).length
     ? `<span class="mono">G${oh.gravida??0} P${oh.para??0} A${oh.abortions??0} L${oh.livingChildren??0}</span>` : "";
