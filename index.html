@@ -77,17 +77,22 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 
 /* ---------------- Mobile layout ---------------- */
 @media (max-width:760px) {
-  /* On mobile the two-column grid (sidebar | main) becomes a single
-     column, so the sidebar and main stack as two grid ROWS instead.
-     Grid rows stretch to fill any leftover height by default — on a
-     short page (e.g. an empty state) that stretched the sticky top
-     bar itself into a tall block instead of a slim fixed bar.
-     align-content:start makes each row hug its own content height. */
-  .app-shell { grid-template-columns:1fr; align-content:start; }
+  /* Turn the shell into a fixed-height flex column: the green topbar
+     (.sidebar) becomes a non-scrolling first child, and only .main
+     scrolls beneath it. This keeps the topbar permanently visible
+     no matter what — more robust across mobile browsers than
+     position:sticky, which can misbehave depending on ancestor
+     overflow/height quirks. */
+  .app-shell {
+    grid-template-columns:1fr;
+    display:flex; flex-direction:column;
+    height:100vh; height:100dvh; /* 100dvh accounts for mobile browser chrome; 100vh is the fallback */
+    overflow:hidden;
+  }
 
   .sidebar {
     flex-direction:row; align-items:center; justify-content:space-between;
-    padding:12px 16px; gap:0; position:sticky; top:0; z-index:20; align-self:start;
+    padding:12px 16px; gap:0; flex-shrink:0; position:relative; z-index:20;
   }
   .sidebar .nav-list { display:none; } /* replaced by bottom-nav on mobile; reappears inside the drawer below */
   .sidebar .brand { font-size:1.15rem; }
@@ -99,7 +104,11 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
   .user-card span { display:none; } /* branch id hidden to save space on mobile */
   .user-card button { display:none; } /* removed from the compact top bar — now lives only in the drawer (see body.drawer-open below) */
 
-  .main { padding:18px 16px calc(90px + env(safe-area-inset-bottom)); }
+  .main {
+    padding:18px 16px calc(90px + env(safe-area-inset-bottom));
+    flex:1 1 auto; min-height:0; /* min-height:0 is required so a flex child can actually scroll instead of stretching the row */
+    overflow-y:auto; -webkit-overflow-scrolling:touch;
+  }
   .main-header h1 { font-size:1.25rem; }
 
   .grid-2, .grid-3 { grid-template-columns:1fr; }
