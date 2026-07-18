@@ -98,6 +98,13 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   #c-ga-ring-wrap { width:100%; display:flex; justify-content:center; margin-top:8px; }
   .ga-ring { width:104px; height:104px; }
   .ga-ring .ga-weeks { font-size:1.3rem; }
+
+  /* Tighter stat cards and near-full-height modals on small screens */
+  .stats-grid { gap:10px; }
+  .stat-card { padding:14px 16px; }
+  .stat-card .stat-value { font-size:1.2rem; }
+  .stat-card--primary .stat-value { font-size:1.35rem; }
+  .modal-box { padding:20px; max-height:85vh; }
 }
 
 @media (max-width:380px) {
@@ -163,6 +170,33 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 
 .empty-state { text-align:center; color:var(--ink-soft); padding:28px 10px; }
 .empty-state .icon { font-size:1.8rem; margin-bottom:6px; }
+
+/* ---------------- Stat cards (dashboard KPIs) ---------------- */
+/* Reusable anywhere a quick-glance metric is needed, not just finance. */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:20px; }
+.stat-card { position:relative; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow); overflow:hidden; }
+.stat-card::before { content:""; position:absolute; inset-inline-start:0; top:0; bottom:0; width:4px; background:var(--bronze); }
+.stat-card .stat-icon { display:block; font-size:1.2rem; margin-bottom:8px; }
+.stat-card .stat-label { font-size:.78rem; color:var(--ink-soft); font-weight:600; margin-bottom:4px; }
+.stat-card .stat-value { display:block; width:100%; border:none; background:transparent; padding:0; font-size:1.4rem; font-weight:800; color:var(--primary-d); font-family:'IBM Plex Mono',monospace; pointer-events:none; }
+.stat-card--primary { background:linear-gradient(135deg,var(--primary) 0%,var(--primary-d) 100%); border-color:var(--primary-d); }
+.stat-card--primary::before { display:none; }
+.stat-card--primary .stat-label { color:rgba(245,241,232,.78); }
+.stat-card--primary .stat-value { color:#fff; font-size:1.55rem; }
+
+/* ---------------- Quick actions ---------------- */
+/* Anything beyond the at-a-glance data lives behind one of these,
+   opened as a focused modal — keeps the page from turning into a
+   "سلطة" of every form shown at once. */
+.finance-actions { display:flex; flex-wrap:wrap; gap:12px; margin:22px 0 4px; }
+
+/* ---------------- Modal (generic, reusable overlay dialog) ---------------- */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(31,42,36,.55); z-index:100; align-items:center; justify-content:center; padding:20px; }
+.modal-box { background:var(--panel); border-radius:var(--radius); box-shadow:0 20px 60px rgba(0,0,0,.35); width:100%; max-width:540px; max-height:88vh; overflow-y:auto; padding:26px; }
+.modal-box-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+.modal-box-header h3 { margin:0; }
+.modal-close-btn { flex-shrink:0; background:none; border:none; font-size:1.2rem; line-height:1; color:var(--ink-soft); cursor:pointer; padding:6px 10px; border-radius:var(--radius-sm); }
+.modal-close-btn:hover { background:#F0EBDD; color:var(--ink); }
 </style>
 </head>
 <body>
@@ -388,11 +422,60 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       </div>
     </section>
 
-    <!-- ===== DOCTOR: financial management (visible to doctor/owner only) ===== -->
+    <!-- ===== DOCTOR: financial management (visible to doctor/owner only) =====
+         Layout: stats first (glance-friendly KPIs), then the invoices list
+         right underneath them, then every other tool tucked behind its own
+         button and opened as a focused modal instead of sprawling inline. ===== -->
     <section id="doc-view-finance" style="display:none;">
-      <div class="grid-2">
-        <div class="panel">
-          <h3>أسعار الزيارات</h3>
+
+      <!-- ---- Statistics: always the first thing on the page ---- -->
+      <div class="stats-grid">
+        <div class="stat-card stat-card--primary">
+          <span class="stat-icon">💰</span>
+          <div class="stat-label">إيراد اليوم</div>
+          <input id="f-today-total" class="stat-value" readonly tabindex="-1">
+        </div>
+        <div class="stat-card stat-card--primary">
+          <span class="stat-icon">📈</span>
+          <div class="stat-label">إيراد هذا الشهر</div>
+          <input id="f-month-total" class="stat-value" readonly tabindex="-1">
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">🩺</span>
+          <div class="stat-label">عدد الكشوفات (الشهر)</div>
+          <input id="f-month-consult-count" class="stat-value" readonly tabindex="-1">
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">🔁</span>
+          <div class="stat-label">عدد الإعادات (الشهر)</div>
+          <input id="f-month-followup-count" class="stat-value" readonly tabindex="-1">
+        </div>
+        <div class="stat-card">
+          <span class="stat-icon">🏷️</span>
+          <div class="stat-label">إجمالي الخصومات (الشهر)</div>
+          <input id="f-month-discounts" class="stat-value" readonly tabindex="-1">
+        </div>
+      </div>
+
+      <!-- ---- Invoices list: unchanged, directly under the statistics ---- -->
+      <div class="panel">
+        <h3>آخر الفواتير — كل الفروع</h3>
+        <ul class="timeline" id="f-invoices-list"><li class="empty-state">جاري التحميل…</li></ul>
+      </div>
+
+      <!-- ---- Quick actions: everything else lives behind its own button ---- -->
+      <div class="finance-actions">
+        <button type="button" class="btn btn-primary" id="finance-open-invoice-btn">🧾 فاتورة جديدة</button>
+        <button type="button" class="btn btn-ghost" id="finance-open-settings-btn">⚙️ إعدادات الأسعار والخصومات</button>
+      </div>
+
+      <!-- ---- Modal: pricing & discount settings ---- -->
+      <div class="modal-overlay" id="modal-finance-settings">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-finance-settings-title">
+          <div class="modal-box-header">
+            <h3 id="modal-finance-settings-title">أسعار الزيارات</h3>
+            <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+          </div>
           <div class="field"><label for="f-consult-price">سعر الكشف (ج.م)</label><input id="f-consult-price" type="number" class="num" value="0"></div>
           <div class="field"><label for="f-followup-price">سعر الإعادة (ج.م)</label><input id="f-followup-price" type="number" class="num" value="0"></div>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:14px 0;">
@@ -403,44 +486,36 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           <button class="btn btn-primary" id="f-save-btn">حفظ الإعدادات المالية</button>
           <div class="error-msg" id="f-save-msg"></div>
         </div>
-        <div class="panel">
-          <h3>ملخص الإيرادات</h3>
-          <div class="field-row">
-            <div class="field"><label>إيراد اليوم</label><input id="f-today-total" class="num" readonly></div>
-            <div class="field"><label>إيراد هذا الشهر</label><input id="f-month-total" class="num" readonly></div>
+      </div>
+
+      <!-- ---- Modal: new invoice (سونار / بند إضافي...) ---- -->
+      <div class="modal-overlay" id="modal-new-invoice">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-new-invoice-title">
+          <div class="modal-box-header">
+            <h3 id="modal-new-invoice-title">فاتورة جديدة (سونار / بند إضافي...)</h3>
+            <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
           </div>
+          <div class="field"><label for="fb-phone">اسم المريضة أو رقم الهاتف</label><input id="fb-phone" type="text" placeholder="ابحث بالاسم أو رقم الهاتف" autocomplete="off"></div>
+          <div id="fb-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div class="field-row">
-            <div class="field"><label>عدد الكشوفات (الشهر)</label><input id="f-month-consult-count" class="num" readonly></div>
-            <div class="field"><label>عدد الإعادات (الشهر)</label><input id="f-month-followup-count" class="num" readonly></div>
+            <div class="field"><label>الكشف</label><input id="fb-consult" type="number" value="0" class="num"></div>
+            <div class="field"><label>سونار</label><input id="fb-sono" type="number" value="0" class="num"></div>
           </div>
-          <div class="field"><label>إجمالي الخصومات الممنوحة (الشهر)</label><input id="f-month-discounts" class="num" readonly></div>
+          <div class="field"><label>بند إضافي (اختياري)</label><input id="fb-extra-label" placeholder="الوصف"></div>
+          <div class="field"><label>قيمة البند الإضافي</label><input id="fb-extra-value" type="number" value="0" class="num"></div>
+          <div class="field-row" id="fb-discount-row" style="display:none;">
+            <div class="field"><label>نوع الخصم</label>
+              <select id="fb-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
+            <div class="field"><label>قيمة الخصم</label><input id="fb-discount-value" type="number" value="0" class="num"></div>
+          </div>
+          <div class="field"><label>الإجمالي بعد الخصم</label><input id="fb-total" class="num" readonly></div>
+          <div class="field"><label>بيانات إضافية (اختياري)</label></div>
+          <div id="fb-cf-list"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="fb-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
+          <button class="btn btn-primary" id="fb-create-btn">إصدار الفاتورة وإرسالها للسكرتارية</button>
         </div>
       </div>
-      <div class="panel">
-        <h3>فاتورة جديدة (سونار / بند إضافي...)</h3>
-        <div class="field"><label for="fb-phone">اسم المريضة أو رقم الهاتف</label><input id="fb-phone" type="text" placeholder="ابحث بالاسم أو رقم الهاتف" autocomplete="off"></div>
-        <div id="fb-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
-        <div class="field-row">
-          <div class="field"><label>الكشف</label><input id="fb-consult" type="number" value="0" class="num"></div>
-          <div class="field"><label>سونار</label><input id="fb-sono" type="number" value="0" class="num"></div>
-        </div>
-        <div class="field"><label>بند إضافي (اختياري)</label><input id="fb-extra-label" placeholder="الوصف"></div>
-        <div class="field"><label>قيمة البند الإضافي</label><input id="fb-extra-value" type="number" value="0" class="num"></div>
-        <div class="field-row" id="fb-discount-row" style="display:none;">
-          <div class="field"><label>نوع الخصم</label>
-            <select id="fb-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
-          <div class="field"><label>قيمة الخصم</label><input id="fb-discount-value" type="number" value="0" class="num"></div>
-        </div>
-        <div class="field"><label>الإجمالي بعد الخصم</label><input id="fb-total" class="num" readonly></div>
-        <div class="field"><label>بيانات إضافية (اختياري)</label></div>
-        <div id="fb-cf-list"></div>
-        <button type="button" class="btn btn-ghost btn-sm" id="fb-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
-        <button class="btn btn-primary" id="fb-create-btn">إصدار الفاتورة وإرسالها للسكرتارية</button>
-      </div>
-      <div class="panel">
-        <h3>آخر الفواتير — كل الفروع</h3>
-        <ul class="timeline" id="f-invoices-list"><li class="empty-state">جاري التحميل…</li></ul>
-      </div>
+
     </section>
 
     <!-- ===== SETTINGS: shared by both roles ===== -->
@@ -759,6 +834,23 @@ function wireSmartPatientSearch(inputId, dropdownId, onSelect) {
     if (e.target !== input && !dropdown.contains(e.target)) hideDropdown();
   });
 }
+
+/* ============================================================
+   MODAL (generic, reusable overlay dialog). Any element with
+   class="modal-overlay" is wired automatically below — open it
+   from anywhere with openModal("modal-id"); adding a new modal
+   elsewhere later needs no extra JS beyond calling this.
+   ============================================================ */
+function openModal(id) { document.getElementById(id).style.display = "flex"; }
+function closeModal(id) { document.getElementById(id).style.display = "none"; }
+
+document.querySelectorAll(".modal-overlay").forEach(overlay => {
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(overlay.id); });
+  overlay.querySelectorAll(".modal-close-btn").forEach(btn => btn.addEventListener("click", () => closeModal(overlay.id)));
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") document.querySelectorAll(".modal-overlay").forEach(o => closeModal(o.id));
+});
 
 /* ============================================================
    DATA LAYER
@@ -1806,6 +1898,9 @@ async function renderFinanceSummary() {
 }
 
 function wireFinancePanel() {
+  document.getElementById("finance-open-invoice-btn").onclick = () => openModal("modal-new-invoice");
+  document.getElementById("finance-open-settings-btn").onclick = () => openModal("modal-finance-settings");
+
   document.getElementById("f-save-btn").onclick = async () => {
     const msg = document.getElementById("f-save-msg");
     msg.textContent = "";
