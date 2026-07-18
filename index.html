@@ -478,18 +478,16 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <ul class="timeline" id="c-timeline"><li class="empty-state">لا توجد زيارات سابقة</li></ul>
           </div>
           <div class="panel">
-            <h3>كشف جديد</h3>
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:2px;">
+              <h3 style="margin:0;">كشف جديد</h3>
+              <button type="button" class="btn btn-ghost btn-sm" id="v-next-visit-btn">
+                <span id="v-next-visit-summary">+ موعد الزيارة القادمة</span>
+              </button>
+            </div>
+            <input type="hidden" id="v-next-visit">
+            <input type="hidden" id="v-next-visit-note">
             <div id="v-abbrev-ref" style="display:none;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;font-size:.82rem;max-height:110px;overflow-y:auto;"></div>
             <div class="field"><label>ملاحظات الكشف</label><textarea id="v-note" rows="6" placeholder="اكتبي ملاحظاتك بأي اختصارات معتادة عندك..."></textarea></div>
-            <div class="field">
-              <label>موعد الزيارة القادمة (اختياري)</label>
-              <button type="button" class="btn btn-ghost" id="v-next-visit-btn" style="width:100%;justify-content:space-between;">
-                <span id="v-next-visit-summary">+ إضافة موعد الزيارة القادمة</span>
-                <span aria-hidden="true">›</span>
-              </button>
-              <input type="hidden" id="v-next-visit">
-              <input type="hidden" id="v-next-visit-note">
-            </div>
             <div class="field"><label>بيانات إضافية (اختياري)</label></div>
             <div id="v-cf-list"></div>
             <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
@@ -2168,7 +2166,7 @@ function refreshNextVisitSummary() {
   const date = document.getElementById("v-next-visit").value;
   const note = document.getElementById("v-next-visit-note").value;
   const summary = document.getElementById("v-next-visit-summary");
-  if (!date) { summary.textContent = "+ إضافة موعد الزيارة القادمة"; return; }
+  if (!date) { summary.textContent = "+ موعد الزيارة القادمة"; return; }
   summary.textContent = `📅 ${date}${note ? " · فيه ملاحظة" : ""}`;
 }
 function wireNextVisitPanel() {
