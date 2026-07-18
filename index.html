@@ -1655,12 +1655,28 @@ function wireAttachmentsPanel(idPrefix, patientId) {
     msg.textContent = "";
     progress.style.display = "";
     progress.textContent = "⏳ جارٍ الحفظ على الجهاز...";
-    try {
-      for (const file of files) await saveAttachmentLocally(patientId, file);
-    } catch (err) {
-      msg.textContent = err.message || "تعذّر حفظ الملف، حاولي مرة أخرى.";
-    } finally {
-      progress.style.display = "none";
+    // IMPORTANT: each file gets its own try/catch. Multi-selecting several
+    // photos at once (gallery/PDF picker) previously ran all of them inside
+    // ONE try/catch wrapping the whole loop — the instant any single file
+    // failed (wrong type, over the size limit, a transient storage error...)
+    // the loop threw and silently aborted, so every file picked AFTER the
+    // failing one in that same selection was never saved or shown, even
+    // though it was perfectly valid on its own. Isolating the try/catch per
+    // file means one bad file only skips itself; everything else in the
+    // batch still gets saved and appears in the grid.
+    const failures = [];
+    for (const file of files) {
+      try {
+        await saveAttachmentLocally(patientId, file);
+      } catch (err) {
+        failures.push(`${file.name || "ملف"}: ${err.message || "تعذّر حفظ الملف."}`);
+      }
+    }
+    progress.style.display = "none";
+    if (failures.length) {
+      msg.textContent = failures.length === files.length
+        ? (failures[0] || "تعذّر حفظ الملفات، حاولي مرة أخرى.")
+        : `تم حفظ باقي الملفات، لكن تعذّر حفظ ${failures.length === 1 ? "ملف واحد" : failures.length + " ملفات"}: ${failures.join(" — ")}`;
     }
   };
   cameraInput.onchange = (e) => { handleFiles(e.target.files); e.target.value = ""; };
