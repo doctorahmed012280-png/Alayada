@@ -238,6 +238,17 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .login-brand { text-align:center; margin-bottom:22px; }
 .login-brand .display { font-size:clamp(1.5rem,8vw,1.9rem); }
 .login-brand .tag { color:var(--ink-soft); font-size:.9rem; }
+/* ---- Patient attachments (prescription / lab-result uploads) ---- */
+.attachments-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:12px; }
+.attachment-card { position:relative; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; background:var(--canvas); display:flex; flex-direction:column; }
+.attachment-thumb { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#fff; }
+.attachment-thumb-pdf { display:flex; align-items:center; justify-content:center; font-size:2.1rem; color:var(--accent); }
+.attachment-meta { padding:6px 8px 8px; }
+.attachment-name { font-size:.76rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.attachment-sub { font-size:.68rem; color:var(--ink-soft); margin-top:2px; }
+.attachment-delete { position:absolute; top:5px; left:5px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(31,42,36,.6); color:#fff; cursor:pointer; font-size:.72rem; line-height:1; display:flex; align-items:center; justify-content:center; }
+.attachment-delete:hover { background:var(--st-cancelled); }
+
 .error-msg { color:var(--st-cancelled); font-size:.85rem; min-height:1.2em; margin-top:4px; }
 
 .empty-state { text-align:center; color:var(--ink-soft); padding:28px 10px; }
@@ -472,6 +483,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             </div>
           </div>
         </div>
+        <div id="c-attachments-mount"></div>
         <div class="grid-2">
           <div class="panel">
             <h3>السجل التاريخي للزيارات</h3>
@@ -735,6 +747,9 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB6bmPP5DYP_EWtT1Amm_gL1k3Gh88GX8g",
@@ -749,6 +764,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 /* ============================================================
@@ -1194,6 +1210,161 @@ async function loadDoctorAppointments(doctorId) {
     });
   });
   return result;
+}
+
+/* ============================================================
+   PATIENT ATTACHMENTS (prescription / lab-result photos & PDFs)
+   Files live in Firebase Storage under
+     tenants/{tenantId}/patients/{patientId}/attachments/{fileId}_{name}
+   and their metadata (name, url, storage path, type, uploader, date)
+   is mirrored into the Realtime DB under patientAttachments/{patientId}
+   so the list renders instantly from a normal onValue subscription
+   without ever touching Storage just to build the grid. Available to
+   both the secretary (at check-in / any time on the patient's file)
+   and the doctor (inside the case file), from a single shared widget
+   further down — see "PATIENT ATTACHMENTS PANEL (shared widget)".
+   ============================================================ */
+const ATTACHMENT_MAX_MB = 15;
+const ATTACHMENT_ACCEPTED_TYPES = /^image\/|^application\/pdf$/;
+
+function attachmentStoragePath(patientId, fileId, safeName) {
+  return t(`patients/${patientId}/attachments/${fileId}_${safeName}`);
+}
+
+/* Uploads one file (image or PDF) to Storage, then writes its metadata
+   into the Realtime DB list for this patient. Throws a friendly Arabic
+   message on validation failure so callers can show it as-is. */
+async function uploadPatientAttachment(patientId, file) {
+  if (!file) return;
+  if (!ATTACHMENT_ACCEPTED_TYPES.test(file.type)) {
+    throw new Error("الملفات المسموح بها: صور أو PDF فقط.");
+  }
+  if (file.size > ATTACHMENT_MAX_MB * 1024 * 1024) {
+    throw new Error(`حجم الملف أكبر من ${ATTACHMENT_MAX_MB} ميجابايت — اختاري ملفًا أصغر.`);
+  }
+  const listRef = push(ref(db, t(`patientAttachments/${patientId}`)));
+  const fileId = listRef.key;
+  const safeName = (file.name || "ملف").replace(/[^\w.\u0600-\u06FF-]+/g, "_");
+  const path = attachmentStoragePath(patientId, fileId, safeName);
+  await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
+  const url = await getDownloadURL(storageRef(storage, path));
+  const meta = {
+    name: file.name || safeName,
+    url, path,
+    kind: file.type === "application/pdf" ? "pdf" : "image",
+    size: file.size,
+    uploadedBy: me.uid,
+    uploadedByName: me.name || (me.role === "doctor" ? "الطبيب" : "السكرتارية"),
+    uploadedAt: serverTimestamp()
+  };
+  await set(listRef, meta);
+  return { id: fileId, ...meta };
+}
+
+function subscribePatientAttachments(patientId, callback) {
+  const listRef = ref(db, t(`patientAttachments/${patientId}`));
+  const handler = onValue(listRef, (snap) => {
+    const rows = [];
+    snap.forEach((child) => rows.push({ id: child.key, ...child.val() }));
+    rows.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+    callback(rows);
+  });
+  return () => off(listRef, "value", handler);
+}
+
+/* Removes both the DB record and the underlying Storage object. The
+   Storage delete is best-effort (ignored if already missing) so a
+   half-finished previous delete can never block this one. */
+async function deletePatientAttachment(patientId, attachment) {
+  await set(ref(db, t(`patientAttachments/${patientId}/${attachment.id}`)), null);
+  if (attachment.path) await deleteObject(storageRef(storage, attachment.path)).catch(() => {});
+}
+
+/* ============================================================
+   PATIENT ATTACHMENTS PANEL (shared widget)
+   One panel — camera capture, gallery/PDF picker, and a live grid
+   of what's already been uploaded — mounted identically from the
+   secretary's patient page and the doctor's case file. `idPrefix`
+   keeps element IDs unique per mount point (the secretary's copy is
+   rebuilt from scratch on every search, so a fixed prefix is safe
+   there too — the old nodes are simply discarded). */
+function attachmentsPanelHTML(idPrefix) {
+  return `
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:2px;">
+        <h3 style="margin:0;">📎 الروشتات والتحاليل</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-ghost btn-sm" id="${idPrefix}-camera-btn">📷 كاميرا</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="${idPrefix}-file-btn">📁 من الجهاز / PDF</button>
+        </div>
+      </div>
+      <p style="color:var(--ink-soft);font-size:.8rem;margin:4px 0 12px;">صورة روشتة أو نتيجة تحليل، أو ملف PDF — لحد ${ATTACHMENT_MAX_MB} ميجا للملف.</p>
+      <input type="file" id="${idPrefix}-camera-input" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="${idPrefix}-file-input" accept="image/*,application/pdf" multiple style="display:none;">
+      <div class="error-msg" id="${idPrefix}-msg"></div>
+      <div id="${idPrefix}-progress" style="display:none;color:var(--ink-soft);font-size:.85rem;margin-bottom:10px;">⏳ جارٍ رفع الملف...</div>
+      <div class="attachments-grid" id="${idPrefix}-list"><div class="empty-state">لا توجد ملفات مرفوعة بعد</div></div>
+    </div>`;
+}
+
+/* Wires the buttons + inputs of one mounted panel and subscribes its
+   list to live updates. Returns the unsubscribe function — callers
+   push it onto the shared `unsubs` array, same as every other
+   subscribe* helper in the app. */
+function wireAttachmentsPanel(idPrefix, patientId) {
+  const cameraBtn = document.getElementById(`${idPrefix}-camera-btn`);
+  const fileBtn = document.getElementById(`${idPrefix}-file-btn`);
+  const cameraInput = document.getElementById(`${idPrefix}-camera-input`);
+  const fileInput = document.getElementById(`${idPrefix}-file-input`);
+  const msg = document.getElementById(`${idPrefix}-msg`);
+  const progress = document.getElementById(`${idPrefix}-progress`);
+  const list = document.getElementById(`${idPrefix}-list`);
+  if (!cameraBtn || !fileBtn || !list) return () => {};
+
+  cameraBtn.onclick = () => cameraInput.click();
+  fileBtn.onclick = () => fileInput.click();
+
+  const handleFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    msg.textContent = "";
+    progress.style.display = "";
+    try {
+      for (const file of files) await uploadPatientAttachment(patientId, file);
+    } catch (err) {
+      msg.textContent = err.message || "تعذّر رفع الملف، حاولي مرة أخرى.";
+    } finally {
+      progress.style.display = "none";
+    }
+  };
+  cameraInput.onchange = (e) => { handleFiles(e.target.files); e.target.value = ""; };
+  fileInput.onchange = (e) => { handleFiles(e.target.files); e.target.value = ""; };
+
+  return subscribePatientAttachments(patientId, (rows) => renderAttachmentsList(list, patientId, rows));
+}
+
+function renderAttachmentsList(list, patientId, rows) {
+  if (!rows.length) { list.innerHTML = `<div class="empty-state">لا توجد ملفات مرفوعة بعد</div>`; return; }
+  list.innerHTML = "";
+  rows.forEach(a => {
+    const card = document.createElement("div");
+    card.className = "attachment-card";
+    const thumb = a.kind === "pdf"
+      ? `<div class="attachment-thumb attachment-thumb-pdf">📄</div>`
+      : `<img class="attachment-thumb" src="${a.url}" alt="${a.name}" loading="lazy">`;
+    card.innerHTML = `
+      <a href="${a.url}" target="_blank" rel="noopener noreferrer">${thumb}</a>
+      <div class="attachment-meta">
+        <div class="attachment-name" title="${a.name}">${a.name}</div>
+        <div class="attachment-sub">${a.uploadedByName || "—"} · ${formatArabicDate(a.uploadedAt)}</div>
+      </div>
+      <button type="button" class="attachment-delete" aria-label="حذف الملف">✕</button>`;
+    card.querySelector(".attachment-delete").onclick = async () => {
+      if (!confirm("حذف هذا الملف نهائيًا؟")) return;
+      await deletePatientAttachment(patientId, a);
+    };
+    list.appendChild(card);
+  });
 }
 
 /* ============================================================
@@ -1829,7 +2000,10 @@ function wirePatientsPanel() {
 }
 
 /* Shared summary card for a found (or just-registered) patient —
-   used by the secretary's search result panel. */
+   used by the secretary's search result panel. Includes the shared
+   attachments panel so the secretary can add/view a patient's
+   prescription or lab-result files without needing the doctor's
+   screen. */
 function renderPatientSearchResult(resultBox, patient) {
   resultBox.className = "";
   resultBox.innerHTML = `<h4 style="margin-top:0">${patient.name}</h4>
@@ -1837,7 +2011,9 @@ function renderPatientSearchResult(resultBox, patient) {
     <div>السن: ${displayAge(patient)} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
     <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>
     <div>العنوان: ${displayAddress(patient)}</div>
-    ${renderCustomFieldsView(patient.customFields)}`;
+    ${renderCustomFieldsView(patient.customFields)}
+    <div style="margin-top:16px;">${attachmentsPanelHTML("p-attach")}</div>`;
+  unsubs.push(wireAttachmentsPanel("p-attach", patient.id));
 }
 
 /* ============================================================
@@ -2040,6 +2216,9 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("c-meta").textContent = `${patient.phone || "—"} · ${displayAge(patient)} سنة · ${patient.bloodType ?? "—"}`;
   const addressLine = displayAddress(patient);
   document.getElementById("c-address").textContent = addressLine !== "—" ? `📍 ${addressLine}` : "";
+
+  document.getElementById("c-attachments-mount").innerHTML = attachmentsPanelHTML("c-attach");
+  unsubs.push(wireAttachmentsPanel("c-attach", patientId));
 
   document.getElementById("v-note").value = "";
   document.getElementById("v-next-visit").value = "";
