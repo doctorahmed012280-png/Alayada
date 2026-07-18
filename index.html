@@ -1564,7 +1564,13 @@ async function processAttachmentUploadQueue(patientId) {
     if (!navigator.onLine) return; // don't even try — avoids wasted data/retries on a dead connection
     const rows = patientId ? await getLocalAttachmentsForPatient(patientId) : await getAllLocalAttachments();
     for (const row of rows) {
-      if (row.status === "uploading") continue;
+      // NOTE: rows can be left stuck with status "uploading" forever if the
+      // tab was closed/refreshed mid-upload in a previous session — nothing
+      // else ever retries them, so they'd silently vanish from the list
+      // without ever showing an error. Since attachmentQueueProcessing above
+      // already stops two runs from racing inside the SAME tab, it's always
+      // safe for a fresh run (e.g. right after login) to re-attempt any row
+      // still marked "uploading" rather than skipping it forever.
       row.status = "uploading"; row.errorMessage = "";
       await putLocalAttachment(row);
       notifyAttachmentQueueChanged(row.patientId);
@@ -1631,7 +1637,15 @@ function attachmentRowFromLocal(row) {
    up). Returns the unsubscribe function — callers push it onto the
    shared `unsubs` array, same as every other subscribe* helper in
    the app. */
+// Reopening the same panel (idPrefix) re-creates its DOM but must first
+// tear down whatever listeners the PREVIOUS mount of that same panel left
+// running — otherwise every visit to e.g. the doctor's attachments page
+// stacks one more live Firebase subscription + queue-change listener on
+// top of the last, forever (unsubs[] is only flushed on logout).
+const activeAttachmentPanels = new Map(); // idPrefix -> unsubscribe fn
+
 function wireAttachmentsPanel(idPrefix, patientId) {
+  activeAttachmentPanels.get(idPrefix)?.();
   const cameraBtn = document.getElementById(`${idPrefix}-camera-btn`);
   const fileBtn = document.getElementById(`${idPrefix}-file-btn`);
   const cameraInput = document.getElementById(`${idPrefix}-camera-input`);
@@ -1647,7 +1661,11 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   let remoteRows = [];
   let localRows = [];
   const rerender = () => renderAttachmentsList(list, patientId, [...localRows.map(attachmentRowFromLocal), ...remoteRows]);
-  const refreshLocal = async () => { localRows = await getLocalAttachmentsForPatient(patientId); rerender(); };
+  const refreshLocal = async () => {
+    try { localRows = await getLocalAttachmentsForPatient(patientId); }
+    catch (err) { console.error("تعذّرت قراءة الملفات المحلية", err); }
+    rerender();
+  };
 
   const handleFiles = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -1689,7 +1707,9 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   refreshLocal();
 
   const unsubscribeRemote = subscribePatientAttachments(patientId, (rows) => { remoteRows = rows; rerender(); });
-  return () => { unsubscribeRemote(); window.removeEventListener("attachments-queue-changed", onQueueChange); };
+  const teardown = () => { unsubscribeRemote(); window.removeEventListener("attachments-queue-changed", onQueueChange); };
+  activeAttachmentPanels.set(idPrefix, teardown);
+  return teardown;
 }
 
 function renderAttachmentsList(list, patientId, rows) {
@@ -2003,6 +2023,10 @@ onAuthStateChanged(auth, async (user) => {
     }
     me = { uid: user.uid, ...account };
     showApp();
+    // Resume any attachment uploads left mid-flight by a previous session
+    // (tab closed/refreshed while a file was still uploading) — see the
+    // "stuck uploading forever" note inside processAttachmentUploadQueue.
+    processAttachmentUploadQueue();
   } catch (err) {
     console.error("account load failed", err);
     document.getElementById("google-error-msg").textContent = `تعذّر تحميل الحساب (${err.code || err.message}).`;
@@ -2599,7 +2623,9 @@ async function openPatientChart(patientId, queueId) {
    a live file count (including how many are still queued locally) and
    a button — the actual camera/upload UI lives on its own page (see
    openPatientAttachmentsPage below) so the exam form stays uncluttered. */
+let teardownAttachmentsNavCard = null; // see wireAttachmentsPanel's activeAttachmentPanels note above
 function wireAttachmentsNavCard(patientId) {
+  teardownAttachmentsNavCard?.();
   const countLabel = document.getElementById("c-attachments-count-label");
   let remoteCount = 0, localCount = 0;
   const updateLabel = () => {
@@ -2608,7 +2634,11 @@ function wireAttachmentsNavCard(patientId) {
     const fileWord = total === 1 ? "ملف واحد" : (total === 2 ? "ملفان" : `${total} ملفات`);
     countLabel.textContent = localCount ? `${fileWord} — ${localCount} بانتظار الرفع` : fileWord;
   };
-  const refreshLocalCount = async () => { localCount = (await getLocalAttachmentsForPatient(patientId)).length; updateLabel(); };
+  const refreshLocalCount = async () => {
+    try { localCount = (await getLocalAttachmentsForPatient(patientId)).length; }
+    catch (err) { console.error("تعذّرت قراءة الملفات المحلية", err); }
+    updateLabel();
+  };
   const onQueueChange = (e) => { if (!e.detail || e.detail.patientId === patientId) refreshLocalCount(); };
   window.addEventListener("attachments-queue-changed", onQueueChange);
   refreshLocalCount();
@@ -2616,7 +2646,8 @@ function wireAttachmentsNavCard(patientId) {
   document.getElementById("c-attachments-open-btn").onclick = () => openPatientAttachmentsPage(patientId);
 
   const unsubscribeRemote = subscribePatientAttachments(patientId, (rows) => { remoteCount = rows.length; updateLabel(); });
-  return () => { unsubscribeRemote(); window.removeEventListener("attachments-queue-changed", onQueueChange); };
+  teardownAttachmentsNavCard = () => { unsubscribeRemote(); window.removeEventListener("attachments-queue-changed", onQueueChange); };
+  return teardownAttachmentsNavCard;
 }
 
 /* Opens the dedicated attachments page for the given patient: camera
