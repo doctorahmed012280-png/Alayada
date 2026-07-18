@@ -1077,7 +1077,7 @@ function subscribeAppointmentsForDate(date, callback) {
   const aRef = ref(db, t(`appointments/${date}`));
   const handler = onValue(aRef, (snap) => {
     const rows = [];
-    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
+    snap.forEach((child) => { rows.push({ id: child.key, date, ...child.val() }); });
     callback(rows);
   });
   return () => off(aRef, "value", handler);
@@ -1090,14 +1090,22 @@ async function confirmAppointment(date, apptId, queueId, invoiceId) {
 }
 /* Any appointment booked for `patientId` today, not yet confirmed —
    used at check-in to auto-confirm instead of creating a stray extra
-   booking record. */
+   booking record.
+   IMPORTANT: `date` isn't a field inside the appointment record
+   itself — it only exists as the parent key in the DB path
+   (appointments/{date}/{apptId}) — so it must be attached here
+   explicitly. Omitting it previously meant confirmAppointment() was
+   called with date=undefined and silently wrote to
+   "appointments/undefined/..." instead of the real record, which is
+   why confirming a reservation never actually cleared it. */
 async function findTodaysUnconfirmedAppointment(patientId) {
-  const snap = await get(ref(db, t(`appointments/${todayKey()}`)));
+  const date = todayKey();
+  const snap = await get(ref(db, t(`appointments/${date}`)));
   if (!snap.exists()) return null;
   let found = null;
   snap.forEach((child) => {
     const v = child.val();
-    if (v.patientId === patientId && !v.confirmed) { found = { id: child.key, ...v }; }
+    if (v.patientId === patientId && !v.confirmed) { found = { id: child.key, date, ...v }; }
   });
   return found;
 }
