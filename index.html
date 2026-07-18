@@ -275,6 +275,21 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 
 /* ---------------- Modal (generic, reusable overlay dialog) ---------------- */
 .modal-overlay { display:none; position:fixed; inset:0; background:rgba(31,42,36,.55); z-index:100; align-items:center; justify-content:center; padding:20px; }
+
+/* Floating action button (e.g. "extra invoice" shortcut on the case-file
+   page). Sits above the bottom-nav on mobile and above the page content
+   on desktop, always reachable regardless of scroll position. */
+.fab {
+  position:fixed; inset-inline-end:20px; bottom:calc(90px + env(safe-area-inset-bottom));
+  width:56px; height:56px; border-radius:50%; border:none;
+  background:var(--accent); color:#fff; box-shadow:0 6px 18px rgba(0,0,0,.25);
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  z-index:15; transition:transform .15s ease, box-shadow .15s ease;
+}
+.fab:hover { transform:translateY(-2px); box-shadow:0 10px 22px rgba(0,0,0,.3); }
+.fab:active { transform:translateY(0); }
+.fab-icon { font-size:1.5rem; line-height:1; }
+@media (min-width:761px) { .fab { bottom:28px; } }
 .modal-box { background:var(--panel); border-radius:var(--radius); box-shadow:0 20px 60px rgba(0,0,0,.35); width:100%; max-width:540px; max-height:88vh; overflow-y:auto; padding:26px; }
 .modal-box-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:18px; padding-bottom:14px; border-bottom:1px solid var(--line); }
 .modal-box-header h3 { margin:0; }
@@ -471,24 +486,38 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <div id="v-cf-list"></div>
             <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
             <button class="btn btn-primary" id="v-complete-btn">حفظ الكشف وإنهاء الزيارة</button>
-
-            <div style="margin-top:20px;padding-top:16px;border-top:1px dashed var(--line);">
-              <h4 style="margin-bottom:10px;">فاتورة إضافية لهذه الزيارة (سونار / بند إضافي)</h4>
-              <p style="color:var(--ink-soft);font-size:.8rem;margin-top:-6px;">لثمن الكشف/الإعادة العادي: ده بيتحصّل من السكرتارية عند تسجيل الدخول. الفاتورة هنا لأي بند إضافي بس.</p>
-              <div class="field-row">
-                <div class="field"><label for="vi-label">الوصف</label><input id="vi-label" value="سونار"></div>
-                <div class="field"><label for="vi-amount">القيمة</label><input id="vi-amount" type="number" value="0" class="num"></div>
-              </div>
-              <div class="field-row" id="vi-discount-row" style="display:none;">
-                <div class="field"><label>نوع الخصم</label>
-                  <select id="vi-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
-                <div class="field"><label>قيمة الخصم</label><input id="vi-discount-value" type="number" value="0" class="num"></div>
-              </div>
-              <div class="field" style="margin-bottom:10px;"><label>الإجمالي المطلوب تحصيله</label><input id="vi-final" class="num" readonly></div>
-              <button type="button" class="btn btn-accent" id="vi-issue-btn">إصدار الفاتورة وإرسالها للسكرتارية</button>
-              <div class="error-msg" id="vi-issue-msg"></div>
-            </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Floating action button: opens the extra-item invoice (sonar/
+           procedure/etc.) as a modal instead of a fixed block at the
+           bottom of the page, so it's reachable in one tap from
+           anywhere on the case file, on any scroll position. Shown
+           only while a patient's chart is actually open. -->
+      <button type="button" class="fab" id="exam-invoice-fab" aria-label="فاتورة إضافية لهذه الزيارة" style="display:none;">
+        <span class="fab-icon">🧾</span>
+      </button>
+
+      <div class="modal-overlay" id="modal-exam-invoice">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-exam-invoice-title">
+          <div class="modal-box-header">
+            <h3 id="modal-exam-invoice-title">فاتورة إضافية لهذه الزيارة (سونار / بند إضافي)</h3>
+            <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+          </div>
+          <p style="color:var(--ink-soft);font-size:.8rem;margin-top:-6px;">لثمن الكشف/الإعادة العادي: ده بيتحصّل من السكرتارية عند تسجيل الدخول. الفاتورة هنا لأي بند إضافي بس.</p>
+          <div class="field-row">
+            <div class="field"><label for="vi-label">الوصف</label><input id="vi-label" value="سونار"></div>
+            <div class="field"><label for="vi-amount">القيمة</label><input id="vi-amount" type="number" value="0" class="num"></div>
+          </div>
+          <div class="field-row" id="vi-discount-row" style="display:none;">
+            <div class="field"><label>نوع الخصم</label>
+              <select id="vi-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
+            <div class="field"><label>قيمة الخصم</label><input id="vi-discount-value" type="number" value="0" class="num"></div>
+          </div>
+          <div class="field" style="margin-bottom:10px;"><label>الإجمالي المطلوب تحصيله</label><input id="vi-final" class="num" readonly></div>
+          <button type="button" class="btn btn-accent" id="vi-issue-btn" style="width:100%;justify-content:center;">إصدار الفاتورة وإرسالها للسكرتارية</button>
+          <div class="error-msg" id="vi-issue-msg"></div>
         </div>
       </div>
     </section>
@@ -1465,6 +1494,7 @@ function showSection(id, title) {
   document.body.classList.toggle("topbar-search-mode", !!activeGroupId);
   document.querySelectorAll(".topbar-search-group").forEach(g => g.style.display = g.id === activeGroupId ? "flex" : "none");
   updateStickyOffsets();
+  updateExamInvoiceFabVisibility();
 }
 
 function buildNav(items) {
@@ -1977,6 +2007,7 @@ async function openPatientChart(patientId, queueId) {
   showSection("doc-view-chart", "ملف الحالة");
   document.getElementById("chart-empty").style.display = "none";
   document.getElementById("chart-content").style.display = "";
+  updateExamInvoiceFabVisibility();
 
   const pSnap = await get(ref(db, t(`patients/${patientId}`)));
   if (!pSnap.exists()) return;
@@ -2039,7 +2070,9 @@ function refreshExamInvoicePricing() {
    the patient currently open in the chart — without re-searching for them
    on the finance screen. The standard كشف/إعادة fee is NOT created here;
    that stays with the secretary at check-in. This always sends the
-   invoice unpaid, straight to the secretary's collection list. */
+   invoice unpaid, straight to the secretary's collection list. Lives in
+   a modal opened from the floating action button (see wireExamInvoiceFab)
+   so it's reachable from anywhere on the case-file page. */
 function wireExamInvoicePanel() {
   const amountEl = document.getElementById("vi-amount");
   const discountType = document.getElementById("vi-discount-type");
@@ -2068,12 +2101,12 @@ function wireExamInvoicePanel() {
         discountAmount,
         total: finalAmount, paid: false, issuedBy: me.uid
       });
-      msg.style.color = "var(--primary)";
-      msg.textContent = "تم إصدار الفاتورة وإرسالها للسكرتارية للتحصيل.";
       document.getElementById("vi-label").value = "سونار";
       amountEl.value = "0";
       discountType.value = "none"; discountValue.value = "0"; discountValue.disabled = true;
       refreshExamInvoicePricing();
+      closeModal("modal-exam-invoice");
+      alert("تم إصدار الفاتورة وإرسالها للسكرتارية للتحصيل.");
     } catch (err) {
       msg.style.color = "var(--st-cancelled)";
       msg.textContent = "تعذّر إصدار الفاتورة، حاول مرة أخرى.";
@@ -2082,9 +2115,24 @@ function wireExamInvoicePanel() {
   };
 }
 
+/* Floating action button that opens the extra-item invoice modal. Only
+   relevant, and only shown, while a patient's case file is actually
+   open (see updateExamInvoiceFabVisibility, called from openPatientChart
+   and showSection). */
+function wireExamInvoiceFab() {
+  document.getElementById("exam-invoice-fab").addEventListener("click", () => openModal("modal-exam-invoice"));
+}
+function updateExamInvoiceFabVisibility() {
+  const fab = document.getElementById("exam-invoice-fab");
+  const chartActive = document.getElementById("doc-view-chart").style.display !== "none";
+  const patientOpen = document.getElementById("chart-content").style.display !== "none";
+  fab.style.display = (chartActive && patientOpen) ? "flex" : "none";
+}
+
 function wireExamPanel() {
   wireCustomFieldsWidget("v-cf-list", "v-cf-add");
   wireExamInvoicePanel();
+  wireExamInvoiceFab();
   document.getElementById("v-complete-btn").onclick = async () => {
     if (!currentPatientId) return;
     const patientName = document.getElementById("c-name").textContent;
