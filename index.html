@@ -171,6 +171,17 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 .empty-state { text-align:center; color:var(--ink-soft); padding:28px 10px; }
 .empty-state .icon { font-size:1.8rem; margin-bottom:6px; }
 
+/* ---- Reserved-today appointments (secretary reminder cards) ---- */
+.appt-card { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; background:#FBF9F4; border-radius:var(--radius-sm); padding:14px 16px; border-inline-start:5px solid var(--st-waiting); }
+.appt-card[data-confirmed="true"] { border-inline-start-color:var(--st-done); opacity:.7; }
+.appt-contact { display:flex; align-items:center; gap:8px; }
+.appt-contact-btn { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:50%; border:none; cursor:pointer; font-size:1.05rem; text-decoration:none; line-height:1; transition:transform .12s, opacity .15s; }
+.appt-contact-btn:hover { transform:scale(1.08); opacity:.92; }
+.appt-contact-btn.call { background:var(--primary); color:#fff; }
+.appt-contact-btn.wa { background:#25D366; color:#fff; }
+.appt-contact-none { font-size:.78rem; color:var(--ink-soft); }
+.field-error { display:block; color:var(--st-cancelled); font-size:.78rem; margin-top:5px; font-weight:600; }
+
 /* ---------------- Stat cards (dashboard KPIs) ---------------- */
 /* Reusable anywhere a quick-glance metric is needed, not just finance. */
 .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:20px; }
@@ -279,6 +290,21 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       </div>
     </section>
 
+    <!-- ===== SECRETARY: today's reserved appointments (reminder list) =====
+         Every appointment booked for today, across all doctors in this
+         branch, so the secretary can call/WhatsApp the patient as a
+         reminder. Read-only here — confirming an arrival still happens
+         through "تسجيل حالة في الدور" as before. ===== -->
+    <section id="sec-view-appointments" style="display:none;">
+      <div class="panel">
+        <h3>حجوزات النهاردة</h3>
+        <p style="color:var(--ink-soft);font-size:.85rem;margin-top:-6px;">
+          كل الحجوزات المسجّلة على أي دكتور في الفرع اليوم. استخدمي زر الاتصال أو واتساب لتذكير المريضة بموعدها.
+        </p>
+        <ul class="queue-list" id="sec-appts-today-list"><li class="empty-state">لا توجد حجوزات لليوم</li></ul>
+      </div>
+    </section>
+
     <!-- ===== SECRETARY: patients ===== -->
     <section id="sec-view-patients" style="display:none;">
       <div class="grid-2">
@@ -293,7 +319,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
             <div class="field"><label for="p-dob">تاريخ الميلاد (اختياري)</label><input id="p-dob" type="date"></div>
           </div>
           <div class="field-row">
-            <div class="field"><label>الهاتف</label><input id="p-phone" type="tel"></div>
+            <div class="field"><label>الهاتف</label><input id="p-phone" type="tel" inputmode="numeric" maxlength="14" placeholder="01xxxxxxxxx"><span class="field-error" id="p-phone-error" style="display:none;"></span></div>
             <div class="field"><label>فصيلة الدم</label>
               <select id="p-blood">
                 <option>O+</option><option>O-</option><option>A+</option><option>A-</option>
@@ -1326,7 +1352,7 @@ function showApp() {
    Renders the same nav items into both the desktop sidebar list
    and the mobile bottom bar, so both stay in sync automatically.
    ============================================================ */
-const ALL_SECTIONS = ["sec-view-queue", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-finance", "view-settings"];
+const ALL_SECTIONS = ["sec-view-queue", "sec-view-appointments", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-finance", "view-settings"];
 
 function showSection(id, title) {
   ALL_SECTIONS.forEach(s => document.getElementById(s).style.display = s === id ? "" : "none");
@@ -1352,6 +1378,7 @@ function buildNav(items) {
 function buildSecretaryNav() {
   buildNav([
     { target: "sec-view-queue", label: "الدور اليومي", short: "الدور", icon: "🕒" },
+    { target: "sec-view-appointments", label: "حجوزات النهاردة", short: "الحجوزات", icon: "📅" },
     { target: "sec-view-patients", label: "المرضى", short: "المرضى", icon: "👥" },
     { target: "sec-view-billing", label: "التحصيل", short: "التحصيل", icon: "💵" }
   ]);
@@ -1375,12 +1402,18 @@ function buildDoctorNav(showSettings) {
    SECRETARY MODULE
    ============================================================ */
 let lastFoundPatient = null;
+/* Populated by loadDoctorsForBranch(): doctorUid -> doctorName, scoped to
+   the secretary's own branch. Reused to (a) fill the "الطبيب المعالج"
+   select and (b) filter/label the today's-reservations reminder list,
+   since appointments are stored per-tenant, not per-branch. */
+let branchDoctorsCache = {};
 
 async function initSecretary() {
   await refreshClinicSettingsCache();
   await loadDoctorsForBranch();
   unsubs.push(subscribeToTodayQueue(me.branchId, renderQueue));
   unsubs.push(subscribeBranchInvoices(me.branchId, renderCollectionList));
+  unsubs.push(subscribeAppointmentsForDate(todayKey(), renderSecretaryApptList));
   wireQueuePanel();
   wirePatientsPanel();
 }
@@ -1388,11 +1421,13 @@ async function initSecretary() {
 async function loadDoctorsForBranch() {
   const sel = document.getElementById("q-doctor");
   sel.innerHTML = "";
+  branchDoctorsCache = {};
   const idxSnap = await get(ref(db, t(`branch_users_index/${me.branchId}`)));
   if (!idxSnap.exists()) { sel.innerHTML = "<option>لا يوجد أطباء بهذا الفرع</option>"; return; }
   for (const uid of Object.keys(idxSnap.val())) {
     const uSnap = await get(ref(db, t(`staff/${uid}`)));
     if (uSnap.exists() && (uSnap.val().role === "doctor" || uSnap.val().role === "owner")) {
+      branchDoctorsCache[uid] = uSnap.val().name;
       const opt = document.createElement("option");
       opt.value = uid; opt.textContent = uSnap.val().name;
       sel.appendChild(opt);
@@ -1494,6 +1529,87 @@ function renderQueue(rows) {
   });
 }
 
+/* ============================================================
+   SECRETARY: today's reservations reminder list.
+   Shows every appointment booked for today across all doctors in
+   this branch (appointments are stored per-tenant/per-date, not
+   per-branch, so we scope them here using branchDoctorsCache).
+   Each card carries the patient's phone with one-tap call/WhatsApp
+   buttons so the secretary can remind her of the appointment.
+   ============================================================ */
+async function renderSecretaryApptList(rows) {
+  const list = document.getElementById("sec-appts-today-list");
+  const scoped = rows.filter(a => branchDoctorsCache[a.doctorId]);
+  if (!scoped.length) { list.innerHTML = `<li class="empty-state">لا توجد حجوزات لليوم</li>`; return; }
+
+  // Not-yet-arrived reservations first — those are the ones that actually need a reminder.
+  scoped.sort((a, b) => Number(!!a.confirmed) - Number(!!b.confirmed));
+
+  const cards = await Promise.all(scoped.map(async (a) => {
+    const pSnap = await get(ref(db, t(`patients/${a.patientId}`)));
+    const patient = pSnap.exists() ? pSnap.val() : {};
+    const visitLabel = a.visitType === "consultation" ? "كشف" : (a.visitType === "followup" ? "إعادة" : "حجز");
+    return `
+      <li class="appt-card" data-confirmed="${!!a.confirmed}">
+        <div>
+          <strong>${a.patientName || patient.name || "—"}</strong>
+          <div style="font-size:.8rem;color:var(--ink-soft)">د. ${branchDoctorsCache[a.doctorId] || "—"} · ${visitLabel}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="badge ${a.confirmed ? "badge-done" : "badge-waiting"}">${a.confirmed ? "وصلت" : "لسه ما وصلتش"}</span>
+          ${buildContactButtonsHtml(patient.phone, a.patientName || patient.name)}
+        </div>
+      </li>`;
+  }));
+  list.innerHTML = cards.join("");
+}
+
+/* Renders the call + WhatsApp buttons for a patient card. Falls back
+   to a small note when no phone is on file instead of showing dead
+   buttons. */
+function buildContactButtonsHtml(phone, patientName) {
+  if (!phone) return `<span class="appt-contact-none">لا يوجد رقم هاتف</span>`;
+  const parsed = parseEgyptPhone(phone);
+  const reminderMsg = encodeURIComponent(`مرحبًا ${patientName || ""}، بنذكّرك بموعدك في العيادة النهاردة. في انتظارك 🌸`);
+  const waButton = parsed.valid
+    ? `<a class="appt-contact-btn wa" href="https://wa.me/${parsed.intl}?text=${reminderMsg}" target="_blank" rel="noopener" title="تذكير عبر واتساب" aria-label="تذكير عبر واتساب">💬</a>`
+    : `<span class="appt-contact-none" title="الرقم المسجّل مش بصيغة موبايل مصري صحيحة">واتساب غير متاح</span>`;
+  return `
+    <div class="appt-contact">
+      <a class="appt-contact-btn call" href="tel:${phone}" title="اتصال بالمريضة" aria-label="اتصال بالمريضة">📞</a>
+      ${waButton}
+    </div>`;
+}
+
+/* ============================================================
+   EGYPTIAN MOBILE PHONE — VALIDATION & NORMALIZATION
+   Single source of truth for phone handling across the app:
+   - Accepts messy input (spaces, dashes, +20, 0020, or already-local).
+   - Normalizes to the local 11-digit form (01xxxxxxxxx) for storage
+     and search, so patient records stay consistent.
+   - Exposes the international digits-only form (20xxxxxxxxxx) for
+     wa.me WhatsApp links.
+   ============================================================ */
+const EGYPT_MOBILE_PREFIXES = ["010", "011", "012", "015"];
+
+function parseEgyptPhone(raw) {
+  let digits = String(raw || "").replace(/\D/g, "");
+  if (!digits) return { valid: false, reason: "رقم الهاتف مطلوب." };
+
+  if (digits.startsWith("00")) digits = digits.slice(2);       // 0020... -> 20...
+  if (digits.startsWith("20") && digits.length === 12) digits = "0" + digits.slice(2); // 20 1xxxxxxxxx -> 01xxxxxxxxx
+
+  const hasValidPrefix = EGYPT_MOBILE_PREFIXES.some(p => digits.startsWith(p));
+  if (digits.length !== 11 || !hasValidPrefix) {
+    return { valid: false, reason: "رقم غير صحيح — لازم يكون رقم موبايل مصري من 11 رقم ويبدأ بـ 010 أو 011 أو 012 أو 015." };
+  }
+  return { valid: true, local: digits, intl: "20" + digits.slice(1) };
+}
+
+/* All WhatsApp/call rendering uses parseEgyptPhone() directly (see
+   buildContactButtonsHtml below) — kept as one source of truth
+   instead of a redundant wrapper. */
+
 function wirePatientsPanel() {
   wireCustomFieldsWidget("p-cf-list", "p-cf-add");
   const resultBox = document.getElementById("p-result");
@@ -1513,9 +1629,25 @@ function wirePatientsPanel() {
       <div>العنوان: ${displayAddress(patient)}</div>
       ${renderCustomFieldsView(patient.customFields)}`;
   });
+
+  // Live feedback as she types/leaves the phone field, so a bad number
+  // gets caught before she tries to save (and before it breaks WhatsApp
+  // reminders later on the reservations tab).
+  const phoneField = document.getElementById("p-phone");
+  const phoneError = document.getElementById("p-phone-error");
+  const validatePhoneField = () => {
+    if (!phoneField.value.trim()) { phoneError.style.display = "none"; return true; }
+    const parsed = parseEgyptPhone(phoneField.value);
+    phoneError.textContent = parsed.valid ? "" : parsed.reason;
+    phoneError.style.display = parsed.valid ? "none" : "";
+    return parsed.valid;
+  };
+  phoneField.addEventListener("blur", validatePhoneField);
+  phoneField.addEventListener("input", () => { if (phoneError.style.display !== "none") validatePhoneField(); });
+
   document.getElementById("p-create-btn").onclick = async () => {
     const name = document.getElementById("p-name").value.trim();
-    const phone = document.getElementById("p-phone").value.trim();
+    const phoneRaw = document.getElementById("p-phone").value.trim();
     const dob = document.getElementById("p-dob").value || null;
     const bloodType = document.getElementById("p-blood").value;
     const emergencyContact = document.getElementById("p-emergency").value.trim();
@@ -1523,11 +1655,15 @@ function wirePatientsPanel() {
     const city = citySelect.value || "";
     const street = document.getElementById("p-street").value.trim();
     const customFields = readCustomFields("p-cf-list");
-    if (!name || !phone) { alert("الاسم ورقم الهاتف مطلوبان."); return; }
+    if (!name || !phoneRaw) { alert("الاسم ورقم الهاتف مطلوبان."); return; }
+    const parsedPhone = parseEgyptPhone(phoneRaw);
+    if (!parsedPhone.valid) { validatePhoneField(); alert(parsedPhone.reason); return; }
+    const phone = parsedPhone.local; // store the normalized 01xxxxxxxxx form
     if (await findPatientByPhone(phone)) { alert("توجد بالفعل مريضة بهذا الرقم."); return; }
     await createPatient(me.branchId, { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields });
     alert("تم حفظ بيانات المريضة.");
     ["p-name", "p-phone", "p-dob", "p-emergency", "p-street"].forEach(id => document.getElementById(id).value = "");
+    phoneError.style.display = "none";
     governorateSelect.value = ""; populateMarkazSelect(citySelect, "");
     clearCustomFields("p-cf-list");
   };
