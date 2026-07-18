@@ -309,37 +309,16 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     <section id="sec-view-patients" style="display:none;">
       <div class="grid-2">
         <div class="panel">
-          <h3>بحث / إضافة مريضة</h3>
+          <h3>بحث عن المرضى</h3>
           <div class="field"><label for="p-search">ابحثي بالاسم أو رقم الهاتف</label><input id="p-search" type="text" placeholder="اسم المريضة أو رقم الهاتف" autocomplete="off"></div>
           <div id="p-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
-          <h4>بيانات مريضة جديدة</h4>
-          <div class="field-row">
-            <div class="field"><label>الاسم</label><input id="p-name"></div>
-            <div class="field"><label for="p-dob">تاريخ الميلاد (اختياري)</label><input id="p-dob" type="date"></div>
-          </div>
-          <div class="field-row">
-            <div class="field"><label>الهاتف</label><input id="p-phone" type="tel" inputmode="numeric" maxlength="14" placeholder="01xxxxxxxxx"><span class="field-error" id="p-phone-error" style="display:none;"></span></div>
-            <div class="field"><label>فصيلة الدم</label>
-              <select id="p-blood">
-                <option>O+</option><option>O-</option><option>A+</option><option>A-</option>
-                <option>B+</option><option>B-</option><option>AB+</option><option>AB-</option>
-              </select></div>
-          </div>
-          <div class="field"><label>جهة اتصال للطوارئ</label><input id="p-emergency" placeholder="الاسم — الهاتف"></div>
-          <div class="field-row">
-            <div class="field"><label for="p-governorate">المحافظة (اختياري)</label><select id="p-governorate"></select></div>
-            <div class="field"><label for="p-city">المركز/الحي (اختياري)</label><select id="p-city"><option value="">اختاري المحافظة أولاً</option></select></div>
-          </div>
-          <div class="field"><label>الشارع/تفاصيل العنوان (اختياري)</label><input id="p-street" placeholder="اسم الشارع ورقم العقار"></div>
-          <div class="field"><label>بيانات إضافية (اختياري)</label></div>
-          <div id="p-cf-list"></div>
-          <button type="button" class="btn btn-ghost btn-sm" id="p-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
-          <button class="btn btn-accent" id="p-create-btn">حفظ المريضة</button>
+          <p style="color:var(--ink-soft);font-size:.85rem;margin-top:0;">مريضة جديدة لسه مش مسجّلة عندنا؟</p>
+          <button type="button" class="btn btn-accent" id="p-open-new-patient-btn">+ تسجيل مريضة جديدة</button>
         </div>
         <div class="panel">
           <h3>نتيجة البحث</h3>
-          <div id="p-result" class="empty-state"><div class="icon">🔍</div>ابحث برقم هاتف لعرض بيانات المريضة</div>
+          <div id="p-result" class="empty-state"><div class="icon">🔍</div>ابحثي بالاسم أو رقم الهاتف لعرض بيانات المريضة</div>
         </div>
       </div>
     </section>
@@ -376,7 +355,13 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 
     <!-- ===== DOCTOR: chart ===== -->
     <section id="doc-view-chart" style="display:none;">
-      <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري مريضة من الدور لفتح ملفها</div>
+      <div class="panel">
+        <h3>البحث عن مريضة</h3>
+        <div class="field"><label for="c-search">ابحث بالاسم أو رقم الهاتف لفتح ملفها الطبي (لو موجودة)</label><input id="c-search" type="text" placeholder="اسم المريضة أو رقم الهاتف" autocomplete="off"></div>
+        <div id="c-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="c-open-new-patient-btn">+ تسجيل مريضة جديدة (لو مفيش سكرتارية)</button>
+      </div>
+      <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري مريضة من دورك، أو ابحثي عنها بالأعلى لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
         <div class="panel">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
@@ -588,6 +573,45 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
         </div>
       </div>
     </section>
+
+    <!-- ===== SHARED MODAL: register a new patient =====
+         Used from both the secretary's "بحث عن المرضى" page and the
+         doctor's "ملف المريضة" page, so a doctor can register a
+         walk-in patient herself when no secretary is on shift. One
+         form, one save handler (wireNewPatientModal in the script
+         below) — openNewPatientModal(onCreated) decides what happens
+         with the patient once she's saved. ===== -->
+    <div class="modal-overlay" id="modal-new-patient">
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-new-patient-title">
+        <div class="modal-box-header">
+          <h3 id="modal-new-patient-title">تسجيل مريضة جديدة</h3>
+          <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>الاسم</label><input id="np-name"></div>
+          <div class="field"><label for="np-dob">تاريخ الميلاد (اختياري)</label><input id="np-dob" type="date"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>الهاتف</label><input id="np-phone" type="tel" inputmode="numeric" maxlength="14" placeholder="01xxxxxxxxx"><span class="field-error" id="np-phone-error" style="display:none;"></span></div>
+          <div class="field"><label>فصيلة الدم</label>
+            <select id="np-blood">
+              <option>O+</option><option>O-</option><option>A+</option><option>A-</option>
+              <option>B+</option><option>B-</option><option>AB+</option><option>AB-</option>
+            </select></div>
+        </div>
+        <div class="field"><label>جهة اتصال للطوارئ</label><input id="np-emergency" placeholder="الاسم — الهاتف"></div>
+        <div class="field-row">
+          <div class="field"><label for="np-governorate">المحافظة (اختياري)</label><select id="np-governorate"></select></div>
+          <div class="field"><label for="np-city">المركز/الحي (اختياري)</label><select id="np-city"><option value="">اختاري المحافظة أولاً</option></select></div>
+        </div>
+        <div class="field"><label>الشارع/تفاصيل العنوان (اختياري)</label><input id="np-street" placeholder="اسم الشارع ورقم العقار"></div>
+        <div class="field"><label>بيانات إضافية (اختياري)</label></div>
+        <div id="np-cf-list"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="np-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
+        <button class="btn btn-accent" id="np-create-btn">حفظ المريضة</button>
+        <div class="error-msg" id="np-save-msg"></div>
+      </div>
+    </div>
 
   </main>
 
@@ -1342,6 +1366,7 @@ function showApp() {
   document.getElementById("user-name").textContent = me.name || "—";
   document.getElementById("user-branch").textContent = me.branchId || "—";
   ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
+  wireNewPatientModal();
   if (me.role === "owner") buildDoctorNav(true);
   else if (me.role === "doctor") buildDoctorNav(false);
   else if (me.role === "secretary") buildSecretaryNav();
@@ -1611,30 +1636,53 @@ function parseEgyptPhone(raw) {
    instead of a redundant wrapper. */
 
 function wirePatientsPanel() {
-  wireCustomFieldsWidget("p-cf-list", "p-cf-add");
   const resultBox = document.getElementById("p-result");
-  const governorateSelect = document.getElementById("p-governorate");
-  const citySelect = document.getElementById("p-city");
+
+  wireSmartPatientSearch("p-search", "p-search-dropdown", (patient) => {
+    document.getElementById("p-search").value = `${patient.name} — ${patient.phone}`;
+    renderPatientSearchResult(resultBox, patient);
+  });
+
+  document.getElementById("p-open-new-patient-btn").onclick = () => {
+    openNewPatientModal((patient) => {
+      document.getElementById("p-search").value = `${patient.name} — ${patient.phone}`;
+      renderPatientSearchResult(resultBox, patient);
+    });
+  };
+}
+
+/* Shared summary card for a found (or just-registered) patient —
+   used by the secretary's search result panel. */
+function renderPatientSearchResult(resultBox, patient) {
+  resultBox.className = "";
+  resultBox.innerHTML = `<h4 style="margin-top:0">${patient.name}</h4>
+    <div class="mono" style="color:var(--ink-soft);margin-bottom:8px;">${patient.phone}</div>
+    <div>السن: ${displayAge(patient)} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
+    <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>
+    <div>العنوان: ${displayAddress(patient)}</div>
+    ${renderCustomFieldsView(patient.customFields)}`;
+}
+
+/* ============================================================
+   SHARED "NEW PATIENT" MODAL
+   One registration form used from two places: the secretary's
+   search page, and the doctor's chart page (for walk-ins when no
+   secretary is on shift). Wired exactly once per session in
+   showApp(); openNewPatientModal(onCreated) resets the form, shows
+   it, and remembers what the caller wants done with the result.
+   ============================================================ */
+let newPatientCreatedCallback = null;
+
+function wireNewPatientModal() {
+  wireCustomFieldsWidget("np-cf-list", "np-cf-add");
+  const governorateSelect = document.getElementById("np-governorate");
+  const citySelect = document.getElementById("np-city");
   populateGovernorateSelect(governorateSelect);
   populateMarkazSelect(citySelect, "");
   governorateSelect.onchange = () => populateMarkazSelect(citySelect, governorateSelect.value);
 
-  wireSmartPatientSearch("p-search", "p-search-dropdown", (patient) => {
-    document.getElementById("p-search").value = `${patient.name} — ${patient.phone}`;
-    resultBox.className = "";
-    resultBox.innerHTML = `<h4 style="margin-top:0">${patient.name}</h4>
-      <div class="mono" style="color:var(--ink-soft);margin-bottom:8px;">${patient.phone}</div>
-      <div>السن: ${displayAge(patient)} — فصيلة الدم: ${patient.bloodType ?? "—"}</div>
-      <div>جهة الطوارئ: ${patient.emergencyContact ?? "—"}</div>
-      <div>العنوان: ${displayAddress(patient)}</div>
-      ${renderCustomFieldsView(patient.customFields)}`;
-  });
-
-  // Live feedback as she types/leaves the phone field, so a bad number
-  // gets caught before she tries to save (and before it breaks WhatsApp
-  // reminders later on the reservations tab).
-  const phoneField = document.getElementById("p-phone");
-  const phoneError = document.getElementById("p-phone-error");
+  const phoneField = document.getElementById("np-phone");
+  const phoneError = document.getElementById("np-phone-error");
   const validatePhoneField = () => {
     if (!phoneField.value.trim()) { phoneError.style.display = "none"; return true; }
     const parsed = parseEgyptPhone(phoneField.value);
@@ -1645,28 +1693,45 @@ function wirePatientsPanel() {
   phoneField.addEventListener("blur", validatePhoneField);
   phoneField.addEventListener("input", () => { if (phoneError.style.display !== "none") validatePhoneField(); });
 
-  document.getElementById("p-create-btn").onclick = async () => {
-    const name = document.getElementById("p-name").value.trim();
-    const phoneRaw = document.getElementById("p-phone").value.trim();
-    const dob = document.getElementById("p-dob").value || null;
-    const bloodType = document.getElementById("p-blood").value;
-    const emergencyContact = document.getElementById("p-emergency").value.trim();
+  document.getElementById("np-create-btn").onclick = async () => {
+    const msg = document.getElementById("np-save-msg");
+    msg.textContent = "";
+    const name = document.getElementById("np-name").value.trim();
+    const phoneRaw = document.getElementById("np-phone").value.trim();
+    const dob = document.getElementById("np-dob").value || null;
+    const bloodType = document.getElementById("np-blood").value;
+    const emergencyContact = document.getElementById("np-emergency").value.trim();
     const governorate = governorateSelect.value || "";
     const city = citySelect.value || "";
-    const street = document.getElementById("p-street").value.trim();
-    const customFields = readCustomFields("p-cf-list");
-    if (!name || !phoneRaw) { alert("الاسم ورقم الهاتف مطلوبان."); return; }
+    const street = document.getElementById("np-street").value.trim();
+    const customFields = readCustomFields("np-cf-list");
+    if (!name || !phoneRaw) { msg.textContent = "الاسم ورقم الهاتف مطلوبان."; return; }
     const parsedPhone = parseEgyptPhone(phoneRaw);
-    if (!parsedPhone.valid) { validatePhoneField(); alert(parsedPhone.reason); return; }
+    if (!parsedPhone.valid) { validatePhoneField(); msg.textContent = parsedPhone.reason; return; }
     const phone = parsedPhone.local; // store the normalized 01xxxxxxxxx form
-    if (await findPatientByPhone(phone)) { alert("توجد بالفعل مريضة بهذا الرقم."); return; }
-    await createPatient(me.branchId, { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields });
-    alert("تم حفظ بيانات المريضة.");
-    ["p-name", "p-phone", "p-dob", "p-emergency", "p-street"].forEach(id => document.getElementById(id).value = "");
-    phoneError.style.display = "none";
-    governorateSelect.value = ""; populateMarkazSelect(citySelect, "");
-    clearCustomFields("p-cf-list");
+    if (await findPatientByPhone(phone)) { msg.textContent = "توجد بالفعل مريضة بهذا الرقم."; return; }
+    const data = { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields };
+    const patientId = await createPatient(me.branchId, data);
+    closeModal("modal-new-patient");
+    const callback = newPatientCreatedCallback;
+    newPatientCreatedCallback = null;
+    if (callback) callback({ id: patientId, ...data });
   };
+}
+
+/* Resets the shared form to a blank state, shows the modal, and
+   registers what should happen with the newly created patient
+   (open her chart, show her in a search-result panel, etc). */
+function openNewPatientModal(onCreated) {
+  ["np-name", "np-phone", "np-dob", "np-emergency", "np-street"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("np-blood").value = "O+";
+  document.getElementById("np-phone-error").style.display = "none";
+  document.getElementById("np-save-msg").textContent = "";
+  document.getElementById("np-governorate").value = "";
+  populateMarkazSelect(document.getElementById("np-city"), "");
+  clearCustomFields("np-cf-list");
+  newPatientCreatedCallback = onCreated || null;
+  openModal("modal-new-patient");
 }
 
 /* Renders ONLY unpaid invoices for the secretary's branch — patient name
@@ -1708,8 +1773,24 @@ function initDoctor() {
   wireExamPanel();
   wireAncPanel();
   wireAbbrevReference();
+  wireChartPatientSearch();
   loadAndRenderDoctorAppointments();
   refreshClinicSettingsCache().then(s => { clinicAncEnabled = s.ancEnabled !== false; });
+}
+
+/* Lets the doctor jump straight to any existing patient's medical
+   file without going through today's queue (e.g. reviewing an old
+   case, or a patient who wasn't checked in today). Registering a
+   brand-new patient reuses the same shared modal as the secretary's
+   search page, for walk-ins when no secretary is on shift. */
+function wireChartPatientSearch() {
+  wireSmartPatientSearch("c-search", "c-search-dropdown", (patient) => {
+    document.getElementById("c-search").value = `${patient.name} — ${patient.phone}`;
+    openPatientChart(patient.id);
+  });
+  document.getElementById("c-open-new-patient-btn").onclick = () => {
+    openNewPatientModal((patient) => openPatientChart(patient.id));
+  };
 }
 
 function wireAbbrevReference() {
