@@ -1432,6 +1432,10 @@ let lastFoundPatient = null;
    select and (b) filter/label the today's-reservations reminder list,
    since appointments are stored per-tenant, not per-branch. */
 let branchDoctorsCache = {};
+/* Set by wireQueuePanel() to its internal "patient found" handler, so
+   the "تسجيل الوصول" shortcut on the reservations tab can trigger the
+   exact same search-result state without duplicating that logic. */
+let selectPatientForCheckIn = null;
 
 async function initSecretary() {
   await refreshClinicSettingsCache();
@@ -1441,6 +1445,12 @@ async function initSecretary() {
   unsubs.push(subscribeAppointmentsForDate(todayKey(), renderSecretaryApptList));
   wireQueuePanel();
   wirePatientsPanel();
+  document.getElementById("sec-appts-today-list").addEventListener("click", (e) => {
+    const btn = e.target.closest(".goto-checkin-btn");
+    if (!btn) return;
+    const entry = secApptsCache[btn.dataset.apptId];
+    if (entry) goToCheckInForAppointment(entry.appt, entry.patient);
+  });
 }
 
 async function loadDoctorsForBranch() {
@@ -1499,7 +1509,7 @@ function wireQueuePanel() {
   discountType.onchange = () => { discountValue.disabled = discountType.value === "none"; recalcPayment(); };
   discountValue.oninput = recalcPayment;
 
-  wireSmartPatientSearch("q-phone", "q-search-dropdown", async (patient) => {
+  async function handlePatientFound(patient) {
     lastFoundPatient = patient;
     phoneInput.value = `${patient.name} — ${patient.phone}`;
     foundBox.style.display = "";
@@ -1513,7 +1523,9 @@ function wireQueuePanel() {
 
     foundBox.innerHTML = `<strong>${patient.name}</strong> — ${displayAge(patient)} سنة` +
       (lastFoundAppointment ? `<div style="color:var(--primary);margin-top:4px;">✓ عندها حجز لليوم — هيتأكد تلقائيًا عند التسجيل</div>` : "");
-  });
+  }
+  wireSmartPatientSearch("q-phone", "q-search-dropdown", handlePatientFound);
+  selectPatientForCheckIn = handlePatientFound;
 
   document.getElementById("q-checkin-btn").onclick = async () => {
     if (!lastFoundPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
@@ -1560,11 +1572,16 @@ function renderQueue(rows) {
    this branch (appointments are stored per-tenant/per-date, not
    per-branch, so we scope them here using branchDoctorsCache).
    Each card carries the patient's phone with one-tap call/WhatsApp
-   buttons so the secretary can remind her of the appointment.
+   buttons so the secretary can remind her of the appointment, plus
+   a one-tap "تسجيل الوصول" shortcut straight into the queue check-in
+   flow once she's actually at the clinic.
    ============================================================ */
+let secApptsCache = {}; // appointment id -> { appt, patient } — used by the "تسجيل الوصول" shortcut button
+
 async function renderSecretaryApptList(rows) {
   const list = document.getElementById("sec-appts-today-list");
   const scoped = rows.filter(a => branchDoctorsCache[a.doctorId]);
+  secApptsCache = {};
   if (!scoped.length) { list.innerHTML = `<li class="empty-state">لا توجد حجوزات لليوم</li>`; return; }
 
   // Not-yet-arrived reservations first — those are the ones that actually need a reminder.
@@ -1572,7 +1589,8 @@ async function renderSecretaryApptList(rows) {
 
   const cards = await Promise.all(scoped.map(async (a) => {
     const pSnap = await get(ref(db, t(`patients/${a.patientId}`)));
-    const patient = pSnap.exists() ? pSnap.val() : {};
+    const patient = pSnap.exists() ? { id: a.patientId, ...pSnap.val() } : { id: a.patientId };
+    secApptsCache[a.id] = { appt: a, patient };
     const visitLabel = a.visitType === "consultation" ? "كشف" : (a.visitType === "followup" ? "إعادة" : "حجز");
     return `
       <li class="appt-card" data-confirmed="${!!a.confirmed}">
@@ -1580,13 +1598,26 @@ async function renderSecretaryApptList(rows) {
           <strong>${a.patientName || patient.name || "—"}</strong>
           <div style="font-size:.8rem;color:var(--ink-soft)">د. ${branchDoctorsCache[a.doctorId] || "—"} · ${visitLabel}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           <span class="badge ${a.confirmed ? "badge-done" : "badge-waiting"}">${a.confirmed ? "وصلت" : "لسه ما وصلتش"}</span>
           ${buildContactButtonsHtml(patient.phone, a.patientName || patient.name)}
+          ${!a.confirmed ? `<button type="button" class="btn btn-accent btn-sm goto-checkin-btn" data-appt-id="${a.id}">تسجيل الوصول</button>` : ""}
         </div>
       </li>`;
   }));
   list.innerHTML = cards.join("");
+}
+
+/* One tap from a reservation card → jumps to "الدور اليومي" with the
+   patient already searched/selected (same state wireQueuePanel()
+   produces from a manual search) and her booked doctor pre-selected,
+   so confirming her arrival & payment takes one more tap instead of
+   searching her again from scratch. */
+function goToCheckInForAppointment(appt, patient) {
+  showSection("sec-view-queue", "الدور اليومي");
+  if (selectPatientForCheckIn) selectPatientForCheckIn(patient);
+  const doctorSelect = document.getElementById("q-doctor");
+  if (doctorSelect && appt.doctorId) doctorSelect.value = appt.doctorId;
 }
 
 /* Renders the call + WhatsApp buttons for a patient card. Falls back
