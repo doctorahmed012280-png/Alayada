@@ -259,6 +259,25 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
   .attachment-card { flex:0 0 calc(50% - 6px); max-width:calc(50% - 6px); }
 }
 
+/* ---- Attachments nav card (lives on the exam/كشف page) ----
+   The exam page only shows a compact summary + button here; the
+   actual upload UI (camera, file picker, grid) lives on its own
+   page so the exam page stays uncluttered — see #doc-view-attachments. */
+.attachments-nav-card { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+.attachments-nav-info { display:flex; align-items:center; gap:12px; min-width:0; }
+.attachments-nav-icon { font-size:1.6rem; flex-shrink:0; }
+.attachments-nav-info h3 { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* ---- Local (device-stored, not-yet-synced) attachment state ----
+   Files are saved to the device the instant they're picked, then
+   uploaded to the cloud in the background — this styles that
+   "queued" / "failed" state on its card until it syncs. */
+.attachment-card.is-local { border-color:var(--st-waiting); }
+.attachment-card.is-local.status-error { border-color:var(--st-cancelled); }
+.attachment-status-badge { position:absolute; bottom:6px; right:6px; left:6px; z-index:2; background:rgba(31,42,36,.75); color:#fff; font-size:.66rem; font-weight:700; padding:3px 6px; border-radius:6px; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.attachment-status-badge.attachment-status-error { background:var(--st-cancelled); }
+.attachment-retry-btn { margin-top:6px; width:100%; justify-content:center; }
+
 .error-msg { color:var(--st-cancelled); font-size:.85rem; min-height:1.2em; margin-top:4px; }
 
 .empty-state { text-align:center; color:var(--ink-soft); padding:28px 10px; }
@@ -493,7 +512,16 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             </div>
           </div>
         </div>
-        <div id="c-attachments-mount"></div>
+        <div class="panel attachments-nav-card">
+          <div class="attachments-nav-info">
+            <span class="attachments-nav-icon">📎</span>
+            <div style="min-width:0;">
+              <h3 style="margin:0;">الروشتات والتحاليل</h3>
+              <p id="c-attachments-count-label" style="margin:2px 0 0;color:var(--ink-soft);font-size:.85rem;">—</p>
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" id="c-attachments-open-btn">فتح صفحة الملفات ←</button>
+        </div>
         <div class="grid-2">
           <div class="panel">
             <h3>السجل التاريخي للزيارات</h3>
@@ -565,6 +593,23 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
           <div class="error-msg" id="vi-issue-msg"></div>
         </div>
       </div>
+    </section>
+
+    <!-- ===== DOCTOR: patient attachments (its own page, reached via the
+         "فتح صفحة الملفات" button on the exam page — kept separate so
+         camera/file capture + the files grid never crowd the exam form
+         itself). Files are saved to the device's own storage the instant
+         they're picked (see the local-first attachment queue in the
+         script below) and synced to the cloud in the background. ===== -->
+    <section id="doc-view-attachments" style="display:none;">
+      <div class="panel" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <button type="button" class="btn btn-ghost btn-sm" id="att-back-btn">→ رجوع لملف الحالة</button>
+        <div style="text-align:end;">
+          <h3 style="margin:0;" id="att-patient-name">—</h3>
+          <div class="mono" style="color:var(--ink-soft);font-size:.85rem;" id="att-patient-meta">—</div>
+        </div>
+      </div>
+      <div id="doc-attachments-mount"></div>
     </section>
 
     <!-- ===== DOCTOR: financial management (visible to doctor/owner only) =====
@@ -1294,9 +1339,9 @@ function fileToBase64(blobOrFile) {
    uploads with no backend and no exposed secret — safe to call from
    client-side code like the rest of this app. PDFs must go through
    the "raw" resource type; images go through "image". */
-async function uploadToCloudinary(file) {
+async function uploadToCloudinary(file, filename) {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", file, filename || file.name || undefined);
   form.append("upload_preset", CLOUDINARY_CONFIG.uploadPreset);
   const resourceType = file.type === "application/pdf" ? "raw" : "image";
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/${resourceType}/upload`, { method: "POST", body: form });
@@ -1309,15 +1354,16 @@ async function uploadToCloudinary(file) {
    currently active, then writes its metadata into the Realtime DB
    list for this patient. Throws a friendly Arabic message on
    validation failure so callers can show it as-is. */
-async function uploadPatientAttachment(patientId, file) {
+async function uploadPatientAttachment(patientId, file, opts = {}) {
   if (!file) return;
-  if (!ATTACHMENT_ACCEPTED_TYPES.test(file.type)) {
+  const mimeType = file.type || opts.mimeType || "";
+  if (!ATTACHMENT_ACCEPTED_TYPES.test(mimeType)) {
     throw new Error("الملفات المسموح بها: صور أو PDF فقط.");
   }
-  const isPdf = file.type === "application/pdf";
+  const isPdf = mimeType === "application/pdf";
   const listRef = push(ref(db, t(`patientAttachments/${patientId}`)));
   const baseMeta = {
-    name: file.name || "ملف",
+    name: file.name || opts.fileName || (isPdf ? "ملف.pdf" : "صورة.jpg"),
     kind: isPdf ? "pdf" : "image",
     uploadedBy: me.uid,
     uploadedByName: me.name || (me.role === "doctor" ? "الطبيب" : "السكرتارية"),
@@ -1328,10 +1374,14 @@ async function uploadPatientAttachment(patientId, file) {
     if (file.size > ATTACHMENT_MAX_MB_CLOUDINARY * 1024 * 1024) {
       throw new Error(`حجم الملف أكبر من ${ATTACHMENT_MAX_MB_CLOUDINARY} ميجابايت — اختاري ملفًا أصغر.`);
     }
-    const uploaded = await uploadToCloudinary(file);
+    const uploaded = await uploadToCloudinary(file, baseMeta.name);
     await set(listRef, { ...baseMeta, source: "cloudinary", url: uploaded.url, publicId: uploaded.publicId, size: file.size });
   } else {
-    const toEncode = isPdf ? file : await compressImageFile(file);
+    // Files coming from the local device queue (opts.skipCompression) were
+    // already resized/compressed the moment they were picked — re-running
+    // compressImageFile here would just lose quality a second time for no
+    // benefit, so it's skipped for those.
+    const toEncode = (isPdf || opts.skipCompression) ? file : await compressImageFile(file);
     if (toEncode.size > ATTACHMENT_MAX_MB_BASE64 * 1024 * 1024) {
       throw new Error(`حجم الملف أكبر من ${ATTACHMENT_MAX_MB_BASE64} ميجابايت — التخزين الحالي مجاني ومحدود المساحة، اختاري ملفًا أصغر.`);
     }
@@ -1364,6 +1414,178 @@ async function deletePatientAttachment(patientId, attachment) {
 }
 
 /* ============================================================
+   LOCAL-FIRST ATTACHMENT QUEUE (device storage)
+   Every picked photo/PDF is saved to the browser's own storage
+   (IndexedDB) the instant it's chosen — before any network call —
+   so capturing a prescription photo feels instant even on a weak
+   connection, and nothing is lost if the connection drops mid-
+   upload. A lightweight background queue then pushes each file up
+   to whichever cloud backend is active (Cloudinary/base64, see
+   above) the moment a connection is available, retrying silently
+   on reconnect. The rest of the app never has to think about this
+   — a file simply shows a "بانتظار الاتصال" badge until it syncs,
+   then behaves exactly like any other attachment.
+   ============================================================ */
+const LOCAL_ATTACH_DB_NAME = "alayada_local_attachments";
+const LOCAL_ATTACH_STORE = "queue";
+let localAttachDbPromise = null;
+
+function idbRequestToPromise(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function openLocalAttachDb() {
+  if (!window.indexedDB) return Promise.resolve(null); // very old/locked-down browser — local queue simply stays off; direct upload below still works
+  if (!localAttachDbPromise) {
+    localAttachDbPromise = new Promise((resolve) => {
+      const req = indexedDB.open(LOCAL_ATTACH_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const store = req.result.createObjectStore(LOCAL_ATTACH_STORE, { keyPath: "localId" });
+        store.createIndex("byPatient", "patientId", { unique: false });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null); // fall back to direct upload if IndexedDB is unavailable (private browsing, quota errors, etc.)
+    });
+  }
+  return localAttachDbPromise;
+}
+
+async function localAttachStore(mode = "readonly") {
+  const dbConn = await openLocalAttachDb();
+  if (!dbConn) return null;
+  return dbConn.transaction(LOCAL_ATTACH_STORE, mode).objectStore(LOCAL_ATTACH_STORE);
+}
+
+async function putLocalAttachment(record) {
+  const store = await localAttachStore("readwrite");
+  if (!store) return false;
+  await idbRequestToPromise(store.put(record));
+  return true;
+}
+
+async function getLocalAttachmentsForPatient(patientId) {
+  const store = await localAttachStore("readonly");
+  if (!store) return [];
+  const rows = await idbRequestToPromise(store.index("byPatient").getAll(patientId));
+  return rows.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+async function getAllLocalAttachments() {
+  const store = await localAttachStore("readonly");
+  if (!store) return [];
+  return idbRequestToPromise(store.getAll());
+}
+
+async function deleteLocalAttachmentRecord(localId) {
+  const store = await localAttachStore("readwrite");
+  if (!store) return;
+  await idbRequestToPromise(store.delete(localId));
+}
+
+function notifyAttachmentQueueChanged(patientId) {
+  window.dispatchEvent(new CustomEvent("attachments-queue-changed", { detail: { patientId } }));
+}
+
+// One reusable object URL per locally-stored image, instead of minting a
+// fresh one on every re-render — avoids leaking memory while a file sits
+// "قيد الرفع" through several UI refreshes.
+const localAttachmentPreviewUrls = new Map();
+function getLocalAttachmentPreviewUrl(row) {
+  if (row.kind !== "image") return null;
+  if (!localAttachmentPreviewUrls.has(row.localId)) {
+    localAttachmentPreviewUrls.set(row.localId, URL.createObjectURL(row.blob));
+  }
+  return localAttachmentPreviewUrls.get(row.localId);
+}
+function releaseLocalAttachmentPreview(localId) {
+  const url = localAttachmentPreviewUrls.get(localId);
+  if (url) { URL.revokeObjectURL(url); localAttachmentPreviewUrls.delete(localId); }
+}
+async function removeLocalAttachment(localId, patientId) {
+  releaseLocalAttachmentPreview(localId);
+  await deleteLocalAttachmentRecord(localId);
+  if (patientId) notifyAttachmentQueueChanged(patientId);
+}
+
+/* Saves a picked file straight to the device's own storage and kicks
+   off a best-effort upload attempt right away. Returns as soon as the
+   local write finishes — callers render the file from the return
+   value without ever waiting on the network. */
+async function saveAttachmentLocally(patientId, file) {
+  if (!file) return null;
+  if (!ATTACHMENT_ACCEPTED_TYPES.test(file.type)) {
+    throw new Error("الملفات المسموح بها: صور أو PDF فقط.");
+  }
+  const isPdf = file.type === "application/pdf";
+  const blob = isPdf ? file : await compressImageFile(file);
+  const maxMb = attachmentMaxMb();
+  if (blob.size > maxMb * 1024 * 1024) {
+    throw new Error(`حجم الملف أكبر من ${maxMb} ميجابايت — اختاري ملفًا أصغر.`);
+  }
+  const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const record = {
+    localId, patientId,
+    name: file.name || (isPdf ? "ملف.pdf" : "صورة.jpg"),
+    kind: isPdf ? "pdf" : "image",
+    mimeType: blob.type || file.type,
+    blob, size: blob.size,
+    createdAt: Date.now(),
+    uploadedByName: me.name || (me.role === "doctor" ? "الطبيب" : "السكرتارية"),
+    status: "pending", // pending → uploading → (removed once synced) | error
+    errorMessage: ""
+  };
+  const stored = await putLocalAttachment(record);
+  if (!stored) {
+    // No IndexedDB available at all — fall back to the old direct-upload
+    // path so the feature still works, just without the offline cushion.
+    await uploadPatientAttachment(patientId, file);
+    return null;
+  }
+  notifyAttachmentQueueChanged(patientId);
+  processAttachmentUploadQueue(patientId); // fire-and-forget background sync
+  return record;
+}
+
+let attachmentQueueProcessing = false;
+let attachmentQueueRerunNeeded = false;
+/* Uploads every queued file for one patient (or every patient, when
+   called with no argument — used on login and on reconnect) to
+   whichever cloud backend is active, one at a time. Safe to call
+   repeatedly/concurrently: an in-flight flag avoids racing duplicate
+   uploads of the same file, and re-runs itself once more if a new
+   file got queued while it was busy so nothing sits forgotten. */
+async function processAttachmentUploadQueue(patientId) {
+  if (attachmentQueueProcessing) { attachmentQueueRerunNeeded = true; return; }
+  attachmentQueueProcessing = true;
+  try {
+    if (!navigator.onLine) return; // don't even try — avoids wasted data/retries on a dead connection
+    const rows = patientId ? await getLocalAttachmentsForPatient(patientId) : await getAllLocalAttachments();
+    for (const row of rows) {
+      if (row.status === "uploading") continue;
+      row.status = "uploading"; row.errorMessage = "";
+      await putLocalAttachment(row);
+      notifyAttachmentQueueChanged(row.patientId);
+      try {
+        await uploadPatientAttachment(row.patientId, row.blob, { skipCompression: true, fileName: row.name, mimeType: row.mimeType });
+        await removeLocalAttachment(row.localId, row.patientId);
+      } catch (err) {
+        row.status = "error";
+        row.errorMessage = err.message || "تعذّر رفع الملف.";
+        await putLocalAttachment(row);
+        notifyAttachmentQueueChanged(row.patientId);
+      }
+    }
+  } finally {
+    attachmentQueueProcessing = false;
+    if (attachmentQueueRerunNeeded) { attachmentQueueRerunNeeded = false; processAttachmentUploadQueue(); }
+  }
+}
+window.addEventListener("online", () => processAttachmentUploadQueue());
+
+/* ============================================================
    PATIENT ATTACHMENTS PANEL (shared widget)
    One panel — camera capture, gallery/PDF picker, and a live grid
    of what's already been uploaded — mounted identically from the
@@ -1390,10 +1612,25 @@ function attachmentsPanelHTML(idPrefix) {
     </div>`;
 }
 
+/* Turns one local (device-stored, not-yet-synced) queue record into
+   the same row shape the Firebase-backed rows already use, so
+   renderAttachmentsList can display both side by side without caring
+   which one it's looking at. */
+function attachmentRowFromLocal(row) {
+  return {
+    id: row.localId, name: row.name, kind: row.kind,
+    url: getLocalAttachmentPreviewUrl(row),
+    uploadedByName: row.uploadedByName, uploadedAt: row.createdAt,
+    source: "local", status: row.status, errorMessage: row.errorMessage
+  };
+}
+
 /* Wires the buttons + inputs of one mounted panel and subscribes its
-   list to live updates. Returns the unsubscribe function — callers
-   push it onto the shared `unsubs` array, same as every other
-   subscribe* helper in the app. */
+   list to live updates — both the synced Firebase list and the local
+   device queue (pending/uploading/failed files still on their way
+   up). Returns the unsubscribe function — callers push it onto the
+   shared `unsubs` array, same as every other subscribe* helper in
+   the app. */
 function wireAttachmentsPanel(idPrefix, patientId) {
   const cameraBtn = document.getElementById(`${idPrefix}-camera-btn`);
   const fileBtn = document.getElementById(`${idPrefix}-file-btn`);
@@ -1407,15 +1644,21 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   cameraBtn.onclick = () => cameraInput.click();
   fileBtn.onclick = () => fileInput.click();
 
+  let remoteRows = [];
+  let localRows = [];
+  const rerender = () => renderAttachmentsList(list, patientId, [...localRows.map(attachmentRowFromLocal), ...remoteRows]);
+  const refreshLocal = async () => { localRows = await getLocalAttachmentsForPatient(patientId); rerender(); };
+
   const handleFiles = async (fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
     msg.textContent = "";
     progress.style.display = "";
+    progress.textContent = "⏳ جارٍ الحفظ على الجهاز...";
     try {
-      for (const file of files) await uploadPatientAttachment(patientId, file);
+      for (const file of files) await saveAttachmentLocally(patientId, file);
     } catch (err) {
-      msg.textContent = err.message || "تعذّر رفع الملف، حاولي مرة أخرى.";
+      msg.textContent = err.message || "تعذّر حفظ الملف، حاولي مرة أخرى.";
     } finally {
       progress.style.display = "none";
     }
@@ -1423,29 +1666,47 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   cameraInput.onchange = (e) => { handleFiles(e.target.files); e.target.value = ""; };
   fileInput.onchange = (e) => { handleFiles(e.target.files); e.target.value = ""; };
 
-  return subscribePatientAttachments(patientId, (rows) => renderAttachmentsList(list, patientId, rows));
+  // Keeps this panel's badges (pending/uploading/error) live even
+  // though IndexedDB itself has no built-in change listener.
+  const onQueueChange = (e) => { if (!e.detail || e.detail.patientId === patientId) refreshLocal(); };
+  window.addEventListener("attachments-queue-changed", onQueueChange);
+  refreshLocal();
+
+  const unsubscribeRemote = subscribePatientAttachments(patientId, (rows) => { remoteRows = rows; rerender(); });
+  return () => { unsubscribeRemote(); window.removeEventListener("attachments-queue-changed", onQueueChange); };
 }
 
 function renderAttachmentsList(list, patientId, rows) {
   if (!rows.length) { list.innerHTML = `<div class="empty-state">لا توجد ملفات مرفوعة بعد</div>`; return; }
   list.innerHTML = "";
   rows.forEach(a => {
+    const isLocal = a.source === "local";
     const card = document.createElement("div");
-    card.className = "attachment-card";
-    const thumb = a.kind === "pdf"
-      ? `<div class="attachment-thumb-wrap"><div class="attachment-thumb-pdf">📄</div></div>`
-      : `<div class="attachment-thumb-wrap"><img class="attachment-thumb" src="${a.url}" alt="${a.name}" loading="lazy"></div>`;
+    card.className = "attachment-card" + (isLocal ? ` is-local status-${a.status}` : "");
+    const statusBadge = !isLocal ? "" : (a.status === "error"
+      ? `<div class="attachment-status-badge attachment-status-error">⚠️ فشل الرفع</div>`
+      : `<div class="attachment-status-badge">⏳ ${a.status === "uploading" ? "جارٍ الرفع…" : "بانتظار الاتصال"}</div>`);
+    const thumbInner = a.kind === "pdf"
+      ? `<div class="attachment-thumb-pdf">📄</div>`
+      : `<img class="attachment-thumb" src="${a.url}" alt="${a.name}" loading="lazy">`;
+    const thumbWrap = `<div class="attachment-thumb-wrap">${thumbInner}${statusBadge}</div>`;
+    // Not-yet-synced files have no cloud URL to open in a new tab.
+    const clickableThumb = isLocal ? thumbWrap : `<a href="${a.url}" target="_blank" rel="noopener noreferrer">${thumbWrap}</a>`;
     card.innerHTML = `
-      <a href="${a.url}" target="_blank" rel="noopener noreferrer">${thumb}</a>
+      ${clickableThumb}
       <div class="attachment-meta">
         <div class="attachment-name" title="${a.name}">${a.name}</div>
         <div class="attachment-sub">${a.uploadedByName || "—"} · ${formatArabicDate(a.uploadedAt)}</div>
+        ${isLocal && a.status === "error" ? `<button type="button" class="btn btn-ghost btn-sm attachment-retry-btn">إعادة المحاولة</button>` : ""}
       </div>
       <button type="button" class="attachment-delete" aria-label="حذف الملف">✕</button>`;
     card.querySelector(".attachment-delete").onclick = async () => {
       if (!confirm("حذف هذا الملف نهائيًا؟")) return;
-      await deletePatientAttachment(patientId, a);
+      if (isLocal) await removeLocalAttachment(a.id, patientId);
+      else await deletePatientAttachment(patientId, a);
     };
+    const retryBtn = card.querySelector(".attachment-retry-btn");
+    if (retryBtn) retryBtn.onclick = () => processAttachmentUploadQueue(patientId);
     list.appendChild(card);
   });
 }
@@ -1740,6 +2001,8 @@ function showApp() {
   document.getElementById("user-branch").textContent = me.branchId || "—";
   ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
   wireNewPatientModal();
+  document.getElementById("att-back-btn").onclick = () => showSection("doc-view-chart", "ملف الحالة");
+  processAttachmentUploadQueue(); // resume any uploads left queued locally from a previous offline session
   updateStickyOffsets();
   if (me.role === "owner") buildDoctorNav(true);
   else if (me.role === "doctor") buildDoctorNav(false);
@@ -1751,7 +2014,7 @@ function showApp() {
    Renders the same nav items into both the desktop sidebar list
    and the mobile bottom bar, so both stay in sync automatically.
    ============================================================ */
-const ALL_SECTIONS = ["sec-view-queue", "sec-view-appointments", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-finance", "view-settings"];
+const ALL_SECTIONS = ["sec-view-queue", "sec-view-appointments", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-attachments", "doc-view-finance", "view-settings"];
 // These pages lead with a search box instead of a page title, so the
 // title/date row is hidden and — instead of a bar inside the page —
 // the search box + "add new case" button take over the sidebar/topbar
@@ -2300,8 +2563,7 @@ async function openPatientChart(patientId, queueId) {
   const addressLine = displayAddress(patient);
   document.getElementById("c-address").textContent = addressLine !== "—" ? `📍 ${addressLine}` : "";
 
-  document.getElementById("c-attachments-mount").innerHTML = attachmentsPanelHTML("c-attach");
-  unsubs.push(wireAttachmentsPanel("c-attach", patientId));
+  unsubs.push(wireAttachmentsNavCard(patientId));
 
   document.getElementById("v-note").value = "";
   document.getElementById("v-next-visit").value = "";
@@ -2315,6 +2577,41 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("vi-issue-msg").textContent = "";
   refreshExamInvoicePricing();
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
+}
+
+/* Wires the compact "📎 الروشتات والتحاليل" card on the exam page: just
+   a live file count (including how many are still queued locally) and
+   a button — the actual camera/upload UI lives on its own page (see
+   openPatientAttachmentsPage below) so the exam form stays uncluttered. */
+function wireAttachmentsNavCard(patientId) {
+  const countLabel = document.getElementById("c-attachments-count-label");
+  let remoteCount = 0, localCount = 0;
+  const updateLabel = () => {
+    const total = remoteCount + localCount;
+    if (!total) { countLabel.textContent = "لا توجد ملفات مرفوعة بعد"; return; }
+    const fileWord = total === 1 ? "ملف واحد" : (total === 2 ? "ملفان" : `${total} ملفات`);
+    countLabel.textContent = localCount ? `${fileWord} — ${localCount} بانتظار الرفع` : fileWord;
+  };
+  const refreshLocalCount = async () => { localCount = (await getLocalAttachmentsForPatient(patientId)).length; updateLabel(); };
+  const onQueueChange = (e) => { if (!e.detail || e.detail.patientId === patientId) refreshLocalCount(); };
+  window.addEventListener("attachments-queue-changed", onQueueChange);
+  refreshLocalCount();
+
+  document.getElementById("c-attachments-open-btn").onclick = () => openPatientAttachmentsPage(patientId);
+
+  const unsubscribeRemote = subscribePatientAttachments(patientId, (rows) => { remoteCount = rows.length; updateLabel(); });
+  return () => { unsubscribeRemote(); window.removeEventListener("attachments-queue-changed", onQueueChange); };
+}
+
+/* Opens the dedicated attachments page for the given patient: camera
+   capture, file/PDF picker, and the live grid — reached from the
+   "فتح صفحة الملفات" button on the exam page's summary card. */
+function openPatientAttachmentsPage(patientId) {
+  showSection("doc-view-attachments", "الروشتات والتحاليل");
+  document.getElementById("att-patient-name").textContent = document.getElementById("c-name").textContent;
+  document.getElementById("att-patient-meta").textContent = document.getElementById("c-meta").textContent;
+  document.getElementById("doc-attachments-mount").innerHTML = attachmentsPanelHTML("c-attach");
+  unsubs.push(wireAttachmentsPanel("c-attach", patientId));
 }
 
 /* A visit record's "next visit" field goes through three possible
