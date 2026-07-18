@@ -222,19 +222,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           <div id="q-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div id="q-patient-found" class="empty-state" style="display:none;"></div>
           <div class="field"><label for="q-doctor">الطبيب المعالج</label><select id="q-doctor"></select></div>
-          <div id="q-payment-box" style="display:none;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <strong id="q-visit-type-label" style="color:var(--primary-d);">—</strong>
-              <span class="num" id="q-base-amount">0 ج.م</span>
-            </div>
-            <div class="field-row" id="q-discount-row" style="display:none;">
-              <div class="field"><label>نوع الخصم</label>
-                <select id="q-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
-              <div class="field"><label>قيمة الخصم</label><input id="q-discount-value" type="number" value="0" class="num"></div>
-            </div>
-            <div class="field" style="margin-bottom:0;"><label>الإجمالي المطلوب دفعه</label><input id="q-final-amount" class="num" readonly></div>
-          </div>
-          <button class="btn btn-primary" id="q-checkin-btn">تسجيل الدفع والدخول للدور</button>
+          <button class="btn btn-primary" id="q-checkin-btn">تسجيل الدخول للدور</button>
         </div>
         <div class="panel">
           <h3>دور اليوم</h3>
@@ -282,34 +270,17 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       </div>
     </section>
 
-    <!-- ===== SECRETARY: billing ===== -->
+    <!-- ===== SECRETARY: collections (invoices are issued by the doctor;
+         the secretary only collects payment and marks them received —
+         she never sees daily totals, exam counts, or revenue figures) ===== -->
     <section id="sec-view-billing" style="display:none;">
-      <div class="grid-2">
-        <div class="panel">
-          <h3>فاتورة جديدة</h3>
-          <div class="field"><label for="b-phone">اسم المريضة أو رقم الهاتف</label><input id="b-phone" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off"></div>
-          <div id="b-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
-          <div class="field-row">
-            <div class="field"><label>الكشف</label><input id="b-consult" type="number" value="0" class="num"></div>
-            <div class="field"><label>سونار</label><input id="b-sono" type="number" value="0" class="num"></div>
-          </div>
-          <div class="field"><label>بند إضافي (اختياري)</label><input id="b-extra-label" placeholder="الوصف"></div>
-          <div class="field"><label>قيمة البند الإضافي</label><input id="b-extra-value" type="number" value="0" class="num"></div>
-          <div class="field-row" id="b-discount-row" style="display:none;">
-            <div class="field"><label>نوع الخصم</label>
-              <select id="b-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
-            <div class="field"><label>قيمة الخصم</label><input id="b-discount-value" type="number" value="0" class="num"></div>
-          </div>
-          <div class="field"><label>الإجمالي بعد الخصم</label><input id="b-total" class="num" readonly></div>
-          <div class="field"><label>بيانات إضافية (اختياري)</label></div>
-          <div id="b-cf-list"></div>
-          <button type="button" class="btn btn-ghost btn-sm" id="b-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
-          <button class="btn btn-primary" id="b-create-btn">إصدار الفاتورة</button>
-        </div>
-        <div class="panel">
-          <h3>فواتير اليوم — الفرع</h3>
-          <ul class="timeline" id="billing-list"><li class="empty-state">لا توجد فواتير بعد</li></ul>
-        </div>
+      <div class="panel">
+        <h3>فواتير محتاجة تحصيل</h3>
+        <p style="color:var(--ink-soft);font-size:.85rem;margin-top:-6px;">
+          الفاتورة بتتصدر من الدكتور بعد الكشف أو مباشرة من عنده. دورك هنا إنك تحصّلي المبلغ من المريضة
+          وتضغطي "تم التحصيل" — الحساب النهائي بيتراجع مع الدكتور آخر اليوم من تقريره.
+        </p>
+        <ul class="queue-list" id="collections-list"><li class="empty-state">لا توجد فواتير محتاجة تحصيل حاليًا</li></ul>
       </div>
     </section>
 
@@ -358,6 +329,23 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
             <div id="v-cf-list"></div>
             <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
             <button class="btn btn-primary" id="v-complete-btn">حفظ الكشف وإنهاء الزيارة</button>
+
+            <div style="margin-top:20px;padding-top:16px;border-top:1px dashed var(--line);">
+              <h4 style="margin-bottom:10px;">إصدار فاتورة الزيارة</h4>
+              <div class="field-row">
+                <div class="field"><label for="vi-type">نوع الزيارة</label>
+                  <select id="vi-type"><option value="consultation">كشف</option><option value="followup">إعادة</option></select></div>
+                <div class="field"><label>السعر الأساسي</label><input id="vi-base" class="num" readonly></div>
+              </div>
+              <div class="field-row" id="vi-discount-row" style="display:none;">
+                <div class="field"><label>نوع الخصم</label>
+                  <select id="vi-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
+                <div class="field"><label>قيمة الخصم</label><input id="vi-discount-value" type="number" value="0" class="num"></div>
+              </div>
+              <div class="field" style="margin-bottom:10px;"><label>الإجمالي المطلوب تحصيله</label><input id="vi-final" class="num" readonly></div>
+              <button type="button" class="btn btn-accent" id="vi-issue-btn">إصدار الفاتورة وإرسالها للسكرتارية</button>
+              <div class="error-msg" id="vi-issue-msg"></div>
+            </div>
           </div>
         </div>
         <div class="panel" id="anc-panel" style="display:none;">
@@ -413,6 +401,27 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
           </div>
           <div class="field"><label>إجمالي الخصومات الممنوحة (الشهر)</label><input id="f-month-discounts" class="num" readonly></div>
         </div>
+      </div>
+      <div class="panel">
+        <h3>فاتورة جديدة (سونار / بند إضافي...)</h3>
+        <div class="field"><label for="fb-phone">اسم المريضة أو رقم الهاتف</label><input id="fb-phone" type="text" placeholder="ابحث بالاسم أو رقم الهاتف" autocomplete="off"></div>
+        <div id="fb-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
+        <div class="field-row">
+          <div class="field"><label>الكشف</label><input id="fb-consult" type="number" value="0" class="num"></div>
+          <div class="field"><label>سونار</label><input id="fb-sono" type="number" value="0" class="num"></div>
+        </div>
+        <div class="field"><label>بند إضافي (اختياري)</label><input id="fb-extra-label" placeholder="الوصف"></div>
+        <div class="field"><label>قيمة البند الإضافي</label><input id="fb-extra-value" type="number" value="0" class="num"></div>
+        <div class="field-row" id="fb-discount-row" style="display:none;">
+          <div class="field"><label>نوع الخصم</label>
+            <select id="fb-discount-type"><option value="none">بدون خصم</option><option value="percent">نسبة %</option><option value="fixed">مبلغ ثابت</option></select></div>
+          <div class="field"><label>قيمة الخصم</label><input id="fb-discount-value" type="number" value="0" class="num"></div>
+        </div>
+        <div class="field"><label>الإجمالي بعد الخصم</label><input id="fb-total" class="num" readonly></div>
+        <div class="field"><label>بيانات إضافية (اختياري)</label></div>
+        <div id="fb-cf-list"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="fb-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
+        <button class="btn btn-primary" id="fb-create-btn">إصدار الفاتورة وإرسالها للسكرتارية</button>
       </div>
       <div class="panel">
         <h3>آخر الفواتير — كل الفروع</h3>
@@ -877,6 +886,14 @@ function subscribeBranchInvoices(branchId, callback) {
   });
   return () => off(bRef, "value", handler);
 }
+/* Marks an invoice issued by the doctor as collected — the ONLY billing
+   action the secretary role is allowed to perform. She can never set or
+   change an amount, only confirm that she received it from the patient. */
+async function markInvoicePaid(branchId, invoiceId, collectedBy) {
+  await update(ref(db, t(`billing/${branchId}/${invoiceId}`)), {
+    paid: true, collectedBy, collectedAt: serverTimestamp()
+  });
+}
 
 /* ============================================================
    APPOINTMENTS (next-visit booking + arrival confirmation)
@@ -1002,9 +1019,12 @@ function computeDiscount(baseAmount, discountType, discountValue) {
   discountAmount = Math.max(0, Math.min(discountAmount, base));
   return { discountAmount, finalAmount: base - discountAmount };
 }
-/* Creates the invoice for a consultation/follow-up visit payment,
-   collected at check-in (new booking arrival or same-day walk-in). */
-async function chargeVisitPayment({ branchId, patientId, patientName, visitType, baseAmount, discountType, discountValue, cashierUid }) {
+/* Issues the invoice for a consultation/follow-up visit — created by the
+   DOCTOR (from the exam screen, right after finishing the visit), and left
+   unpaid ("pending collection") until the secretary collects the cash from
+   the patient and marks it via markInvoicePaid(). The doctor decides the
+   amount; the secretary never sets or edits one. */
+async function issueVisitInvoice({ branchId, patientId, patientName, visitType, baseAmount, discountType, discountValue, issuedBy }) {
   const { discountAmount, finalAmount } = computeDiscount(baseAmount, discountType, discountValue);
   const invoiceId = await createInvoice(branchId, {
     patientId, patientName,
@@ -1015,8 +1035,8 @@ async function chargeVisitPayment({ branchId, patientId, patientName, visitType,
     discountValue: discountAmount > 0 ? (Number(discountValue) || 0) : 0,
     discountAmount,
     total: finalAmount,
-    paid: true,
-    cashierUid
+    paid: false,
+    issuedBy
   });
   return { invoiceId, discountAmount, finalAmount };
 }
@@ -1225,7 +1245,7 @@ function buildSecretaryNav() {
   buildNav([
     { target: "sec-view-queue", label: "الدور اليومي", short: "الدور", icon: "🕒" },
     { target: "sec-view-patients", label: "المرضى", short: "المرضى", icon: "👥" },
-    { target: "sec-view-billing", label: "الفواتير", short: "الفواتير", icon: "🧾" }
+    { target: "sec-view-billing", label: "التحصيل", short: "التحصيل", icon: "💵" }
   ]);
   initSecretary();
 }
@@ -1252,10 +1272,9 @@ async function initSecretary() {
   await refreshClinicSettingsCache();
   await loadDoctorsForBranch();
   unsubs.push(subscribeToTodayQueue(me.branchId, renderQueue));
-  unsubs.push(subscribeBranchInvoices(me.branchId, renderBilling));
+  unsubs.push(subscribeBranchInvoices(me.branchId, renderCollectionList));
   wireQueuePanel();
   wirePatientsPanel();
-  wireBillingPanel();
 }
 
 async function loadDoctorsForBranch() {
@@ -1274,46 +1293,20 @@ async function loadDoctorsForBranch() {
   if (!sel.children.length) sel.innerHTML = "<option>لا يوجد أطباء بهذا الفرع</option>";
 }
 
+/* No pricing/discount logic here anymore — the secretary no longer sets or
+   sees any amount at check-in. She just registers the patient into today's
+   queue; the doctor decides and issues the invoice later, from the exam
+   screen or the finance screen, and it lands in her collection list. */
 function wireQueuePanel() {
   const phoneInput = document.getElementById("q-phone");
   const foundBox = document.getElementById("q-patient-found");
-  const paymentBox = document.getElementById("q-payment-box");
-  const visitTypeLabel = document.getElementById("q-visit-type-label");
-  const baseAmountEl = document.getElementById("q-base-amount");
-  const discountRow = document.getElementById("q-discount-row");
-  const discountType = document.getElementById("q-discount-type");
-  const discountValue = document.getElementById("q-discount-value");
-  const finalAmountEl = document.getElementById("q-final-amount");
   let lastFoundAppointment = null;
-  let currentVisitType = "consultation";
-  let currentBaseAmount = 0;
-
-  function recalcPayment() {
-    const { finalAmount } = computeDiscount(currentBaseAmount, discountType.value, discountValue.value);
-    finalAmountEl.value = `${finalAmount} ج.م`;
-  }
-  discountType.onchange = () => { discountValue.disabled = discountType.value === "none"; recalcPayment(); };
-  discountValue.oninput = recalcPayment;
 
   wireSmartPatientSearch("q-phone", "q-search-dropdown", async (patient) => {
     lastFoundPatient = patient;
     phoneInput.value = `${patient.name} — ${patient.phone}`;
     foundBox.style.display = "";
     lastFoundAppointment = await findTodaysUnconfirmedAppointment(patient.id);
-
-    if (lastFoundAppointment) {
-      currentVisitType = lastFoundAppointment.visitType || "followup";
-      currentBaseAmount = Number(lastFoundAppointment.price) || priceFor("followup");
-    } else {
-      currentVisitType = "consultation";
-      currentBaseAmount = priceFor("consultation");
-    }
-    visitTypeLabel.textContent = currentVisitType === "consultation" ? "ثمن الكشف" : "ثمن الإعادة";
-    baseAmountEl.textContent = `${currentBaseAmount} ج.م`;
-    discountRow.style.display = isDiscountEnabled() ? "" : "none";
-    discountType.value = "none"; discountValue.value = "0"; discountValue.disabled = true;
-    recalcPayment();
-    paymentBox.style.display = "";
 
     foundBox.innerHTML = `<strong>${patient.name}</strong> — ${displayAge(patient)} سنة` +
       (lastFoundAppointment ? `<div style="color:var(--primary);margin-top:4px;">✓ عندها حجز لليوم — هيتأكد تلقائيًا عند التسجيل</div>` : "");
@@ -1324,16 +1317,10 @@ function wireQueuePanel() {
     const doctorId = document.getElementById("q-doctor").value;
     if (!doctorId) { alert("اختاري الطبيب المعالج."); return; }
 
-    const { invoiceId } = await chargeVisitPayment({
-      branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name,
-      visitType: currentVisitType, baseAmount: currentBaseAmount,
-      discountType: discountType.value, discountValue: discountValue.value, cashierUid: me.uid
-    });
-
     const queueId = await checkInPatient({ branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name, doctorId, createdBy: me.uid });
-    if (lastFoundAppointment) { await confirmAppointment(lastFoundAppointment.date, lastFoundAppointment.id, queueId, invoiceId); }
+    if (lastFoundAppointment) { await confirmAppointment(lastFoundAppointment.date, lastFoundAppointment.id, queueId); }
 
-    phoneInput.value = ""; foundBox.style.display = "none"; paymentBox.style.display = "none";
+    phoneInput.value = ""; foundBox.style.display = "none";
     lastFoundPatient = null; lastFoundAppointment = null;
   };
 }
@@ -1397,66 +1384,30 @@ function wirePatientsPanel() {
   };
 }
 
-function wireBillingPanel() {
-  wireCustomFieldsWidget("b-cf-list", "b-cf-add");
-  const consult = document.getElementById("b-consult"), sono = document.getElementById("b-sono");
-  const extraVal = document.getElementById("b-extra-value"), total = document.getElementById("b-total");
-  const discountRow = document.getElementById("b-discount-row");
-  const discountType = document.getElementById("b-discount-type"), discountValue = document.getElementById("b-discount-value");
-  discountRow.style.display = isDiscountEnabled() ? "" : "none";
-  function subtotal() { return (Number(consult.value)||0) + (Number(sono.value)||0) + (Number(extraVal.value)||0); }
-  function recalc() {
-    const { finalAmount } = computeDiscount(subtotal(), discountType.value, discountValue.value);
-    total.value = finalAmount;
-  }
-  [consult, sono, extraVal].forEach(el => el.oninput = recalc);
-  discountType.onchange = () => { discountValue.disabled = discountType.value === "none"; recalc(); };
-  discountValue.oninput = recalc;
-  discountValue.disabled = true;
-  recalc();
-  let selectedBillingPatient = null;
-  wireSmartPatientSearch("b-phone", "b-search-dropdown", (patient) => {
-    selectedBillingPatient = patient;
-    document.getElementById("b-phone").value = `${patient.name} — ${patient.phone}`;
-  });
-  document.getElementById("b-create-btn").onclick = async () => {
-    if (!selectedBillingPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
-    const patient = selectedBillingPatient;
-    const items = { consultation: Number(consult.value)||0, ultrasound: Number(sono.value)||0 };
-    const extraLabel = document.getElementById("b-extra-label").value.trim();
-    if (extraLabel) items[extraLabel] = Number(extraVal.value) || 0;
-    const customFields = readCustomFields("b-cf-list");
-    const { discountAmount, finalAmount } = computeDiscount(subtotal(), discountType.value, discountValue.value);
-    await createInvoice(me.branchId, {
-      patientId: patient.id, patientName: patient.name, items, visitType: "manual",
-      subtotal: subtotal(),
-      discountType: discountAmount > 0 ? discountType.value : "none",
-      discountValue: discountAmount > 0 ? (Number(discountValue.value)||0) : 0,
-      discountAmount,
-      total: finalAmount, paid: true, cashierUid: me.uid, customFields
-    });
-    alert("تم إصدار الفاتورة.");
-    document.getElementById("b-phone").value = "";
-    selectedBillingPatient = null;
-    document.getElementById("b-extra-label").value = "";
-    consult.value = "0"; sono.value = "0"; extraVal.value = "0";
-    discountType.value = "none"; discountValue.value = "0"; discountValue.disabled = true;
-    recalc();
-    clearCustomFields("b-cf-list");
-  };
-}
-
-function renderBilling(rows) {
-  const list = document.getElementById("billing-list");
-  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا توجد فواتير بعد</li>`; return; }
+/* Renders ONLY unpaid invoices for the secretary's branch — patient name
+   and amount due, nothing else. No daily/monthly totals, no exam counts,
+   no revenue figures: those stay strictly on the doctor's finance screen.
+   As soon as she collects the cash and taps "تم التحصيل" the invoice is
+   marked paid and disappears from this list immediately. */
+function renderCollectionList(rows) {
+  const list = document.getElementById("collections-list");
+  const pending = rows.filter(r => !r.paid);
+  if (!pending.length) { list.innerHTML = `<li class="empty-state">لا توجد فواتير محتاجة تحصيل حاليًا</li>`; return; }
   list.innerHTML = "";
-  rows.slice(0, 30).forEach(row => {
+  pending.forEach(row => {
     const li = document.createElement("li");
-    const visitLabel = row.visitType === "consultation" ? "كشف" : (row.visitType === "followup" ? "إعادة" : "");
-    li.innerHTML = `<div class="t-date">${formatTime(row.timestamp)}</div>
-      <div class="t-body"><strong>${row.patientName}</strong> ${visitLabel ? `<span class="mono" style="color:var(--ink-soft);">(${visitLabel})</span>` : ""} — <span class="num">${row.total} ج.م</span>
-      ${row.discountAmount ? `<span style="color:var(--accent);"> (خصم ${row.discountAmount} ج.م)</span>` : ""}
-      ${renderCustomFieldsView(row.customFields)}</div>`;
+    li.className = "queue-item"; li.dataset.status = "waiting";
+    const visitLabel = row.visitType === "consultation" ? "كشف" : (row.visitType === "followup" ? "إعادة" : "فاتورة");
+    li.innerHTML = `
+      <div><strong>${row.patientName || "—"}</strong>
+        <div style="font-size:.8rem;color:var(--ink-soft)">${visitLabel} — ${formatTime(row.timestamp)}</div></div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="num" style="font-weight:700;color:var(--primary-d);">${row.total} ج.م</span>
+        <button class="btn btn-primary btn-sm" data-act="collect">تم التحصيل</button>
+      </div>`;
+    li.querySelector('[data-act="collect"]').onclick = async () => {
+      await markInvoicePaid(me.branchId, row.id, me.uid);
+    };
     list.appendChild(li);
   });
 }
@@ -1554,6 +1505,12 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("v-note").value = "";
   document.getElementById("v-next-visit").value = "";
   document.getElementById("anc-panel").style.display = clinicAncEnabled ? "" : "none";
+  document.getElementById("vi-type").value = "consultation";
+  document.getElementById("vi-discount-type").value = "none";
+  document.getElementById("vi-discount-value").value = "0";
+  document.getElementById("vi-discount-value").disabled = true;
+  document.getElementById("vi-issue-msg").textContent = "";
+  refreshExamInvoicePricing();
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
 
   if (!clinicAncEnabled) { renderAnc(null); return; }
@@ -1589,8 +1546,64 @@ function renderTimeline(rows) {
   });
 }
 
+/* Recomputes the base/final amounts shown in the exam screen's quick
+   invoice panel from the currently-selected visit type + discount. Kept
+   standalone (not nested) so openPatientChart() can call it too, to reset
+   the numbers whenever the doctor switches to a different patient. */
+function refreshExamInvoicePricing() {
+  const typeSel = document.getElementById("vi-type");
+  const baseEl = document.getElementById("vi-base");
+  const discountRow = document.getElementById("vi-discount-row");
+  const discountType = document.getElementById("vi-discount-type");
+  const discountValue = document.getElementById("vi-discount-value");
+  const finalEl = document.getElementById("vi-final");
+  const base = priceFor(typeSel.value);
+  baseEl.value = `${base} ج.م`;
+  discountRow.style.display = isDiscountEnabled() ? "" : "none";
+  const { finalAmount } = computeDiscount(base, discountType.value, discountValue.value);
+  finalEl.value = `${finalAmount} ج.م`;
+}
+
+/* The doctor's quick way to invoice a visit: pick كشف/إعادة, apply an
+   optional discount, and send it straight to the secretary's collection
+   list — she never chooses or edits the amount, only collects it. */
+function wireExamInvoicePanel() {
+  const typeSel = document.getElementById("vi-type");
+  const discountType = document.getElementById("vi-discount-type");
+  const discountValue = document.getElementById("vi-discount-value");
+  typeSel.onchange = refreshExamInvoicePricing;
+  discountType.onchange = () => { discountValue.disabled = discountType.value === "none"; refreshExamInvoicePricing(); };
+  discountValue.oninput = refreshExamInvoicePricing;
+  discountValue.disabled = true;
+  refreshExamInvoicePricing();
+
+  document.getElementById("vi-issue-btn").onclick = async () => {
+    const msg = document.getElementById("vi-issue-msg");
+    msg.textContent = "";
+    if (!currentPatientId) return;
+    const patientName = document.getElementById("c-name").textContent;
+    const base = priceFor(typeSel.value);
+    try {
+      await issueVisitInvoice({
+        branchId: me.branchId, patientId: currentPatientId, patientName,
+        visitType: typeSel.value, baseAmount: base,
+        discountType: discountType.value, discountValue: discountValue.value, issuedBy: me.uid
+      });
+      msg.style.color = "var(--primary)";
+      msg.textContent = "تم إصدار الفاتورة وإرسالها للسكرتارية للتحصيل.";
+      discountType.value = "none"; discountValue.value = "0"; discountValue.disabled = true;
+      refreshExamInvoicePricing();
+    } catch (err) {
+      msg.style.color = "var(--st-cancelled)";
+      msg.textContent = "تعذّر إصدار الفاتورة، حاول مرة أخرى.";
+      console.error("issue visit invoice failed", err);
+    }
+  };
+}
+
 function wireExamPanel() {
   wireCustomFieldsWidget("v-cf-list", "v-cf-add");
+  wireExamInvoicePanel();
   document.getElementById("v-complete-btn").onclick = async () => {
     if (!currentPatientId) return;
     const patientName = document.getElementById("c-name").textContent;
@@ -1683,7 +1696,7 @@ async function initFinance() {
   document.getElementById("f-followup-price").value = clinicSettingsCache.followupPrice || 0;
   document.getElementById("f-discount-toggle").checked = clinicSettingsCache.discountEnabled !== false;
   document.getElementById("f-max-discount").value = clinicSettingsCache.maxDiscountPercent || 100;
-  if (!financeWired) { wireFinancePanel(); financeWired = true; }
+  if (!financeWired) { wireFinancePanel(); wireDoctorInvoicePanel(); financeWired = true; }
   await renderFinanceSummary();
 }
 
@@ -1720,7 +1733,8 @@ async function renderFinanceSummary() {
     li.innerHTML = `<div class="t-date">${formatTime(row.timestamp)}</div>
       <div class="t-body"><strong>${row.patientName}</strong> — <span class="mono" style="color:var(--ink-soft);">${visitLabel}</span>
       — <span class="num">${row.total} ج.م</span>
-      ${row.discountAmount ? `<span style="color:var(--accent);"> (خصم ${row.discountAmount} ج.م)</span>` : ""}</div>`;
+      ${row.discountAmount ? `<span style="color:var(--accent);"> (خصم ${row.discountAmount} ج.م)</span>` : ""}
+      ${row.paid ? `<span class="badge badge-done" style="margin-inline-start:8px;">محصّلة</span>` : `<span class="badge badge-waiting" style="margin-inline-start:8px;">قيد التحصيل</span>`}</div>`;
     list.appendChild(li);
   });
 }
@@ -1743,6 +1757,60 @@ function wireFinancePanel() {
       msg.textContent = "تعذّر الحفظ، حاولي مرة أخرى.";
       console.error("save finance settings failed", err);
     }
+  };
+}
+
+/* General-purpose invoice screen — for anything beyond a plain visit fee
+   (sonar, extra procedures, custom items). Moved here from the secretary
+   role: only the doctor decides amounts. Every invoice created here is
+   "paid: false" and shows up in the secretary's collection list until she
+   collects it. */
+function wireDoctorInvoicePanel() {
+  wireCustomFieldsWidget("fb-cf-list", "fb-cf-add");
+  const consult = document.getElementById("fb-consult"), sono = document.getElementById("fb-sono");
+  const extraVal = document.getElementById("fb-extra-value"), total = document.getElementById("fb-total");
+  const discountRow = document.getElementById("fb-discount-row");
+  const discountType = document.getElementById("fb-discount-type"), discountValue = document.getElementById("fb-discount-value");
+  discountRow.style.display = isDiscountEnabled() ? "" : "none";
+  function subtotal() { return (Number(consult.value)||0) + (Number(sono.value)||0) + (Number(extraVal.value)||0); }
+  function recalc() {
+    const { finalAmount } = computeDiscount(subtotal(), discountType.value, discountValue.value);
+    total.value = finalAmount;
+  }
+  [consult, sono, extraVal].forEach(el => el.oninput = recalc);
+  discountType.onchange = () => { discountValue.disabled = discountType.value === "none"; recalc(); };
+  discountValue.oninput = recalc;
+  discountValue.disabled = true;
+  recalc();
+  let selectedPatient = null;
+  wireSmartPatientSearch("fb-phone", "fb-search-dropdown", (patient) => {
+    selectedPatient = patient;
+    document.getElementById("fb-phone").value = `${patient.name} — ${patient.phone}`;
+  });
+  document.getElementById("fb-create-btn").onclick = async () => {
+    if (!selectedPatient) { alert("ابحث عن المريضة بالاسم أو رقم الهاتف واخترها من القائمة أولاً."); return; }
+    const patient = selectedPatient;
+    const items = { consultation: Number(consult.value)||0, ultrasound: Number(sono.value)||0 };
+    const extraLabel = document.getElementById("fb-extra-label").value.trim();
+    if (extraLabel) items[extraLabel] = Number(extraVal.value) || 0;
+    const customFields = readCustomFields("fb-cf-list");
+    const { discountAmount, finalAmount } = computeDiscount(subtotal(), discountType.value, discountValue.value);
+    await createInvoice(me.branchId, {
+      patientId: patient.id, patientName: patient.name, items, visitType: "manual",
+      subtotal: subtotal(),
+      discountType: discountAmount > 0 ? discountType.value : "none",
+      discountValue: discountAmount > 0 ? (Number(discountValue.value)||0) : 0,
+      discountAmount,
+      total: finalAmount, paid: false, issuedBy: me.uid, customFields
+    });
+    alert("تم إصدار الفاتورة وإرسالها للسكرتارية للتحصيل.");
+    document.getElementById("fb-phone").value = "";
+    selectedPatient = null;
+    document.getElementById("fb-extra-label").value = "";
+    consult.value = "0"; sono.value = "0"; extraVal.value = "0";
+    discountType.value = "none"; discountValue.value = "0"; discountValue.disabled = true;
+    recalc();
+    clearCustomFields("fb-cf-list");
   };
 }
 
