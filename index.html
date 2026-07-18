@@ -2055,6 +2055,23 @@ async function openPatientChart(patientId, queueId) {
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
 }
 
+/* Once a visit record is part of the historical log, its "next visit"
+   field is no longer an upcoming/future thing — it's a past appointment
+   that either was kept or wasn't. So instead of "الزيارة القادمة" (which
+   makes no sense for a record that's already history), we resolve it to
+   a concrete outcome:
+     - "تم عمل الزيارة في <date>"    → a visit record exists on that date
+     - "لم تتم الزيارة في <date>"   → no visit record exists on that date
+   Attendance is determined by scanning the patient's own timeline for a
+   record whose `date` matches the stored `nextVisitDate`. */
+function resolveNextVisitStatus(nextVisitDate, allRows) {
+  if (!nextVisitDate) return "";
+  const attended = allRows.some(row => row.date === nextVisitDate);
+  return attended
+    ? ` — تم عمل الزيارة في ${nextVisitDate}`
+    : ` — لم تتم الزيارة في ${nextVisitDate}`;
+}
+
 function renderTimeline(rows) {
   const list = document.getElementById("c-timeline");
   if (!rows.length) { list.innerHTML = `<li class="empty-state">لا توجد زيارات سابقة</li>`; return; }
@@ -2062,10 +2079,11 @@ function renderTimeline(rows) {
   rows.forEach(r => {
     const li = document.createElement("li");
     const oldFormat = r.diagnosis || r.symptoms || r.ultrasoundFindings || r.prescription;
-    li.innerHTML = `<div class="t-date">${r.date || "—"}${r.nextVisitDate ? ` — الزيارة القادمة: ${r.nextVisitDate}` : ""}</div>
+    const nextVisitStatus = resolveNextVisitStatus(r.nextVisitDate, rows);
+    li.innerHTML = `<div class="t-date">${r.date || "—"}${nextVisitStatus}</div>
       <div class="t-body">
         ${r.note ? r.note.replace(/\n/g, "<br>") : ""}
-        ${r.nextVisitNote ? `<br><span style="color:var(--accent)">ملاحظة للزيارة القادمة: ${r.nextVisitNote.replace(/\n/g, "<br>")}</span>` : ""}
+        ${r.nextVisitNote ? `<br><span style="color:var(--accent)">ملاحظة الزيارة: ${r.nextVisitNote.replace(/\n/g, "<br>")}</span>` : ""}
         ${oldFormat ? `
           ${r.diagnosis ? `<strong>${r.diagnosis}</strong><br>` : ""}
           ${r.symptoms ? `الأعراض: ${r.symptoms}<br>` : ""}
