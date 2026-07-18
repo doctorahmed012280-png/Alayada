@@ -2055,21 +2055,23 @@ async function openPatientChart(patientId, queueId) {
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
 }
 
-/* Once a visit record is part of the historical log, its "next visit"
-   field is no longer an upcoming/future thing — it's a past appointment
-   that either was kept or wasn't. So instead of "الزيارة القادمة" (which
-   makes no sense for a record that's already history), we resolve it to
-   a concrete outcome:
-     - "تم عمل الزيارة في <date>"    → a visit record exists on that date
-     - "لم تتم الزيارة في <date>"   → no visit record exists on that date
+/* A visit record's "next visit" field goes through three possible
+   states as time passes:
+     - Still today or in the future, and no visit happened yet → it's
+       still a pending appointment: "الموعد القادم: <date>".
+     - The date has actually passed (before today) with no matching
+       visit record → the patient never showed up: "لم تتم الزيارة في <date>".
+     - A visit record exists on that date (attended, whether on time,
+       early, or even after the date "passed") → "تم عمل الزيارة في <date>".
    Attendance is determined by scanning the patient's own timeline for a
-   record whose `date` matches the stored `nextVisitDate`. */
+   record whose `date` matches the stored `nextVisitDate`; "has the date
+   passed" is determined by comparing against todayKey(). */
 function resolveNextVisitStatus(nextVisitDate, allRows) {
   if (!nextVisitDate) return "";
   const attended = allRows.some(row => row.date === nextVisitDate);
-  return attended
-    ? ` — تم عمل الزيارة في ${nextVisitDate}`
-    : ` — لم تتم الزيارة في ${nextVisitDate}`;
+  if (attended) return ` — تم عمل الزيارة في ${nextVisitDate}`;
+  if (nextVisitDate < todayKey()) return ` — لم تتم الزيارة في ${nextVisitDate}`;
+  return ` — الموعد القادم: ${nextVisitDate}`;
 }
 
 function renderTimeline(rows) {
