@@ -198,6 +198,14 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 }
 
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); }
+
+/* Diagnostic-aid module toggle cards (Settings screen) */
+.module-toggle { display:flex; align-items:flex-start; gap:12px; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--canvas); cursor:pointer; transition:border-color .15s ease, background .15s ease; }
+.module-toggle:not(:last-child) { margin-bottom:10px; }
+.module-toggle:hover { border-color:var(--accent); }
+.module-toggle input[type="checkbox"] { width:18px; height:18px; flex-shrink:0; margin-top:2px; accent-color:var(--accent); }
+.module-toggle .module-title { font-weight:700; color:var(--primary-d); display:block; }
+.module-toggle .module-desc { color:var(--ink-soft); font-size:.82rem; margin-top:2px; display:block; }
 .panel + .panel { margin-top:20px; }
 .grid-2 { display:grid; grid-template-columns:1.1fr .9fr; gap:20px; align-items:start; }
 
@@ -652,11 +660,11 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
       </div>
       <div class="grid-2">
         <div class="panel">
-          <h3>إعدادات العيادة</h3>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="s-anc-toggle" style="width:18px;height:18px;">
-            تفعيل وحدة متابعة الحمل (ANC) — للعيادات النسائية فقط
-          </label>
+          <h3>الوسائل المساعدة في التشخيص</h3>
+          <p style="color:var(--ink-soft);font-size:.85rem;margin-top:-6px;margin-bottom:14px;">
+            فعّلي فقط الأدوات المتعلقة بتخصص عيادتك. التطبيق عام لأي تخصص، وهذه الوحدات اختيارية.
+          </p>
+          <div id="s-diagnostic-modules"></div>
         </div>
         <div class="panel">
           <h3>الاختصارات الطبية</h3>
@@ -1255,6 +1263,32 @@ async function getClinicSettings() {
 }
 async function setClinicSetting(key, value) {
   await update(ref(db, t("settings")), { [key]: value });
+}
+
+/* ------------------------------------------------------------
+   DIAGNOSTIC AID MODULES (customizable per clinic/specialty)
+   ------------------------------------------------------------
+   The app is specialty-agnostic by default. Any optional
+   diagnosis-support tool (e.g. pregnancy/ANC tracking today,
+   growth charts, chronic-disease follow-up, etc. tomorrow) is
+   registered here as one entry and the Settings screen renders
+   a toggle for it automatically — no HTML changes needed to add,
+   remove, or rename a module later.
+     key        -> settings/{key} boolean flag in Firebase
+     title      -> shown as the toggle's label
+     description-> one-line explanation shown under the label
+     defaultOn  -> whether it's enabled out of the box for new clinics
+   ------------------------------------------------------------ */
+const DIAGNOSTIC_AID_MODULES = [
+  {
+    key: "ancEnabled",
+    title: "متابعة الحمل والولادة (ANC)",
+    description: "لعيادات النساء والتوليد: عمر الحمل، الموعد المتوقع للولادة، وتاريخ الزيارات القيصرية.",
+    defaultOn: false
+  }
+];
+function isModuleEnabled(settings, module) {
+  return module.defaultOn ? settings[module.key] !== false : settings[module.key] === true;
 }
 
 /* ============================================================
@@ -1968,7 +2002,7 @@ function renderCollectionList(rows) {
    DOCTOR MODULE
    ============================================================ */
 let currentPatientId = null, currentQueueId = null, currentPregnancyId = null, currentLmp = null;
-let clinicAncEnabled = true;
+let clinicAncEnabled = false; // OB/GYN-specific module: off by default, enabled per-clinic from Settings
 
 function initDoctor() {
   unsubs.push(subscribeToTodayQueue(me.branchId, renderDoctorQueue));
@@ -1977,7 +2011,7 @@ function initDoctor() {
   wireAbbrevReference();
   wireChartPatientSearch();
   loadAndRenderDoctorAppointments();
-  refreshClinicSettingsCache().then(s => { clinicAncEnabled = s.ancEnabled !== false; });
+  refreshClinicSettingsCache().then(s => { clinicAncEnabled = s.ancEnabled === true; });
 }
 
 /* Lets the doctor jump straight to any existing patient's medical
@@ -2067,7 +2101,7 @@ async function openPatientChart(patientId, queueId) {
   const addressLine = displayAddress(patient);
   document.getElementById("c-address").textContent = addressLine !== "—" ? `📍 ${addressLine}` : "";
   const oh = patient.obstetricHistory || {};
-  document.getElementById("c-obstetric").innerHTML = Object.keys(oh).length
+  document.getElementById("c-obstetric").innerHTML = (clinicAncEnabled && Object.keys(oh).length)
     ? `<span class="mono">G${oh.gravida??0} P${oh.para??0} A${oh.abortions??0} L${oh.livingChildren??0}</span>` : "";
 
   document.getElementById("v-note").value = "";
@@ -2404,8 +2438,34 @@ async function initSettings() {
   await loadBranchesForSettings();
   await renderAccountsList();
   const settings = await getClinicSettings();
-  document.getElementById("s-anc-toggle").checked = settings.ancEnabled !== false; // default ON
+  renderDiagnosticModulesList(settings);
   if (!settingsWired) { wireSettingsPanel(); settingsWired = true; }
+}
+
+/* Builds one toggle card per registered diagnostic-aid module and wires
+   its change handler here (instead of in wireSettingsPanel) since the
+   cards themselves are re-created every time Settings is opened, in case
+   the module registry ever grows dynamically in the future. */
+function renderDiagnosticModulesList(settings) {
+  const container = document.getElementById("s-diagnostic-modules");
+  container.innerHTML = "";
+  DIAGNOSTIC_AID_MODULES.forEach(module => {
+    const label = document.createElement("label");
+    label.className = "module-toggle";
+    label.innerHTML = `
+      <input type="checkbox" data-module-key="${module.key}">
+      <span>
+        <span class="module-title">${module.title}</span>
+        <span class="module-desc">${module.description}</span>
+      </span>`;
+    const checkbox = label.querySelector("input");
+    checkbox.checked = isModuleEnabled(settings, module);
+    checkbox.addEventListener("change", (e) => {
+      setClinicSetting(module.key, e.target.checked).catch(err => console.error("setClinicSetting failed", err));
+      if (module.key === "ancEnabled") clinicAncEnabled = e.target.checked;
+    });
+    container.appendChild(label);
+  });
 }
 
 async function loadBranchesForSettings() {
@@ -2444,10 +2504,6 @@ async function renderAccountsList() {
 }
 
 function wireSettingsPanel() {
-  document.getElementById("s-anc-toggle").addEventListener("change", (e) => {
-    setClinicSetting("ancEnabled", e.target.checked).catch(err => console.error("setClinicSetting failed", err));
-  });
-
   const abList = document.getElementById("ab-list");
   subscribeAbbreviations((rows) => {
     if (!rows.length) { abList.innerHTML = `<li class="empty-state">لا توجد اختصارات بعد</li>`; return; }
