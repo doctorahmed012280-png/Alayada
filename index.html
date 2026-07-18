@@ -481,7 +481,15 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <h3>كشف جديد</h3>
             <div id="v-abbrev-ref" style="display:none;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;font-size:.82rem;max-height:110px;overflow-y:auto;"></div>
             <div class="field"><label>ملاحظات الكشف</label><textarea id="v-note" rows="6" placeholder="اكتبي ملاحظاتك بأي اختصارات معتادة عندك..."></textarea></div>
-            <div class="field"><label for="v-next-visit">موعد الزيارة القادمة (اختياري)</label><input id="v-next-visit" type="date"></div>
+            <div class="field">
+              <label>موعد الزيارة القادمة (اختياري)</label>
+              <button type="button" class="btn btn-ghost" id="v-next-visit-btn" style="width:100%;justify-content:space-between;">
+                <span id="v-next-visit-summary">+ إضافة موعد الزيارة القادمة</span>
+                <span aria-hidden="true">›</span>
+              </button>
+              <input type="hidden" id="v-next-visit">
+              <input type="hidden" id="v-next-visit-note">
+            </div>
             <div class="field"><label>بيانات إضافية (اختياري)</label></div>
             <div id="v-cf-list"></div>
             <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
@@ -498,6 +506,23 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
       <button type="button" class="fab" id="exam-invoice-fab" aria-label="فاتورة إضافية لهذه الزيارة" style="display:none;">
         <span class="fab-icon">🧾</span>
       </button>
+
+      <div class="modal-overlay" id="modal-next-visit">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-next-visit-title">
+          <div class="modal-box-header">
+            <h3 id="modal-next-visit-title">موعد الزيارة القادمة</h3>
+            <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+          </div>
+          <div class="field"><label for="nv-date">تاريخ الزيارة القادمة</label><input id="nv-date" type="date"></div>
+          <div class="field"><label for="nv-note">ملاحظات للزيارة القادمة (اختياري)</label>
+            <textarea id="nv-note" rows="3" placeholder="مثال: إحضار نتيجة التحليل، متابعة الضغط..."></textarea></div>
+          <div class="error-msg" id="nv-error"></div>
+          <div style="display:flex;gap:10px;margin-top:6px;">
+            <button type="button" class="btn btn-ghost" id="nv-clear-btn" style="flex:1;justify-content:center;">إلغاء الموعد</button>
+            <button type="button" class="btn btn-primary" id="nv-save-btn" style="flex:1;justify-content:center;">حفظ الموعد</button>
+          </div>
+        </div>
+      </div>
 
       <div class="modal-overlay" id="modal-exam-invoice">
         <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-exam-invoice-title">
@@ -1115,9 +1140,9 @@ async function markInvoicePaid(branchId, invoiceId, collectedBy) {
    read; upcoming/all-dates views fall back to reading the whole
    node and filtering client-side (fine at clinic scale).
    ============================================================ */
-async function bookAppointment(date, { patientId, patientName, doctorId, bookedBy, visitType = "followup", price = 0 }) {
+async function bookAppointment(date, { patientId, patientName, doctorId, bookedBy, visitType = "followup", price = 0, note = null }) {
   const newRef = push(ref(db, t(`appointments/${date}`)));
-  await set(newRef, { patientId, patientName, doctorId, bookedBy, visitType, price, confirmed: false, paid: false, createdAt: serverTimestamp() });
+  await set(newRef, { patientId, patientName, doctorId, bookedBy, visitType, price, note, confirmed: false, paid: false, createdAt: serverTimestamp() });
   return newRef.key;
 }
 function subscribeAppointmentsForDate(date, callback) {
@@ -1973,7 +1998,8 @@ function renderApptList(listId, rows, showDate) {
   list.innerHTML = "";
   rows.forEach(a => {
     const li = document.createElement("li");
-    li.innerHTML = `<div><strong>${a.patientName}</strong>${showDate ? ` <span class="mono" style="color:var(--ink-soft);">— ${a.date}</span>` : ""}</div>`;
+    li.innerHTML = `<div><strong>${a.patientName}</strong>${showDate ? ` <span class="mono" style="color:var(--ink-soft);">— ${a.date}</span>` : ""}</div>
+      ${a.note ? `<div style="font-size:.8rem;color:var(--ink-soft);margin-top:2px;">📝 ${a.note}</div>` : ""}`;
     list.appendChild(li);
   });
 }
@@ -2019,6 +2045,8 @@ async function openPatientChart(patientId, queueId) {
 
   document.getElementById("v-note").value = "";
   document.getElementById("v-next-visit").value = "";
+  document.getElementById("v-next-visit-note").value = "";
+  refreshNextVisitSummary();
   document.getElementById("vi-label").value = "سونار";
   document.getElementById("vi-amount").value = "0";
   document.getElementById("vi-discount-type").value = "none";
@@ -2039,6 +2067,7 @@ function renderTimeline(rows) {
     li.innerHTML = `<div class="t-date">${r.date || "—"}${r.nextVisitDate ? ` — الزيارة القادمة: ${r.nextVisitDate}` : ""}</div>
       <div class="t-body">
         ${r.note ? r.note.replace(/\n/g, "<br>") : ""}
+        ${r.nextVisitNote ? `<br><span style="color:var(--accent)">ملاحظة للزيارة القادمة: ${r.nextVisitNote.replace(/\n/g, "<br>")}</span>` : ""}
         ${oldFormat ? `
           ${r.diagnosis ? `<strong>${r.diagnosis}</strong><br>` : ""}
           ${r.symptoms ? `الأعراض: ${r.symptoms}<br>` : ""}
@@ -2129,30 +2158,77 @@ function updateExamInvoiceFabVisibility() {
   fab.style.display = (chartActive && patientOpen) ? "flex" : "none";
 }
 
+/* Floating modal for the "next visit" date + note (opened from the
+   v-next-visit-btn button in the exam panel). Keeps the exam form itself
+   short while still letting the doctor leave a note about what should
+   happen at the next visit (e.g. "bring lab result", "recheck BP"). The
+   chosen date/note are cached in hidden inputs (#v-next-visit /
+   #v-next-visit-note) that wireExamPanel's save handler reads from. */
+function refreshNextVisitSummary() {
+  const date = document.getElementById("v-next-visit").value;
+  const note = document.getElementById("v-next-visit-note").value;
+  const summary = document.getElementById("v-next-visit-summary");
+  if (!date) { summary.textContent = "+ إضافة موعد الزيارة القادمة"; return; }
+  summary.textContent = `📅 ${date}${note ? " · فيه ملاحظة" : ""}`;
+}
+function wireNextVisitPanel() {
+  const dateInput = document.getElementById("v-next-visit");
+  const noteInput = document.getElementById("v-next-visit-note");
+  const modalDate = document.getElementById("nv-date");
+  const modalNote = document.getElementById("nv-note");
+  const errorEl = document.getElementById("nv-error");
+
+  document.getElementById("v-next-visit-btn").addEventListener("click", () => {
+    errorEl.textContent = "";
+    modalDate.value = dateInput.value;
+    modalNote.value = noteInput.value;
+    openModal("modal-next-visit");
+  });
+
+  document.getElementById("nv-save-btn").addEventListener("click", () => {
+    if (!modalDate.value) { errorEl.textContent = "اختاري تاريخ الزيارة القادمة."; return; }
+    dateInput.value = modalDate.value;
+    noteInput.value = modalNote.value.trim();
+    refreshNextVisitSummary();
+    closeModal("modal-next-visit");
+  });
+
+  document.getElementById("nv-clear-btn").addEventListener("click", () => {
+    dateInput.value = ""; noteInput.value = "";
+    modalDate.value = ""; modalNote.value = ""; errorEl.textContent = "";
+    refreshNextVisitSummary();
+    closeModal("modal-next-visit");
+  });
+}
+
 function wireExamPanel() {
   wireCustomFieldsWidget("v-cf-list", "v-cf-add");
   wireExamInvoicePanel();
   wireExamInvoiceFab();
+  wireNextVisitPanel();
   document.getElementById("v-complete-btn").onclick = async () => {
     if (!currentPatientId) return;
     const patientName = document.getElementById("c-name").textContent;
     const nextVisitDate = document.getElementById("v-next-visit").value || null;
+    const nextVisitNote = document.getElementById("v-next-visit-note").value.trim() || null;
     const record = {
       note: document.getElementById("v-note").value.trim(),
-      nextVisitDate,
+      nextVisitDate, nextVisitNote,
       customFields: readCustomFields("v-cf-list")
     };
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
     if (nextVisitDate) {
       await bookAppointment(nextVisitDate, {
         patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid,
-        visitType: "followup", price: priceFor("followup")
+        visitType: "followup", price: priceFor("followup"), note: nextVisitNote
       });
     }
     alert(nextVisitDate ? "تم حفظ الكشف وحجز الزيارة القادمة." : "تم حفظ الكشف وإنهاء الزيارة.");
     currentQueueId = null;
     document.getElementById("v-note").value = "";
     document.getElementById("v-next-visit").value = "";
+    document.getElementById("v-next-visit-note").value = "";
+    refreshNextVisitSummary();
     clearCustomFields("v-cf-list");
     loadAndRenderDoctorAppointments();
   };
