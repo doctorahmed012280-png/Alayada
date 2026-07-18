@@ -747,9 +747,6 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
   signInWithEmailAndPassword, createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {
-  getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB6bmPP5DYP_EWtT1Amm_gL1k3Gh88GX8g",
@@ -764,7 +761,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
-const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 /* ============================================================
@@ -1214,51 +1210,125 @@ async function loadDoctorAppointments(doctorId) {
 
 /* ============================================================
    PATIENT ATTACHMENTS (prescription / lab-result photos & PDFs)
-   Files live in Firebase Storage under
-     tenants/{tenantId}/patients/{patientId}/attachments/{fileId}_{name}
-   and their metadata (name, url, storage path, type, uploader, date)
-   is mirrored into the Realtime DB under patientAttachments/{patientId}
-   so the list renders instantly from a normal onValue subscription
-   without ever touching Storage just to build the grid. Available to
-   both the secretary (at check-in / any time on the patient's file)
-   and the doctor (inside the case file), from a single shared widget
-   further down — see "PATIENT ATTACHMENTS PANEL (shared widget)".
-   ============================================================ */
-const ATTACHMENT_MAX_MB = 15;
-const ATTACHMENT_ACCEPTED_TYPES = /^image\/|^application\/pdf$/;
+   TWO storage backends live side-by-side in this one file, so the
+   feature works for free from day one and can be upgraded later
+   by changing two lines — nothing else in the app needs to change:
 
-function attachmentStoragePath(patientId, fileId, safeName) {
-  return t(`patients/${patientId}/attachments/${fileId}_${safeName}`);
+     1) BASE64-IN-DATABASE (default, zero setup, zero cost).
+        The file itself (compressed, for images) is stored as a
+        base64 string directly inside Realtime Database, which is
+        free on Firebase's Spark plan. Good enough for a clinic just
+        starting out; the free quota (1GB stored / 10GB served per
+        month) is the practical ceiling.
+
+     2) CLOUDINARY (optional upgrade, still free — 25GB storage +
+        25GB bandwidth/month, no card required). Turns on the moment
+        CLOUDINARY_CONFIG below has both values filled in; only the
+        resulting URL is then stored in the database instead of the
+        file itself, keeping the database light indefinitely.
+
+   Every record keeps a `source` field ("base64" | "cloudinary") so
+   the rest of the app — the shared attachments panel below — can
+   display/delete either kind identically without caring which one
+   produced it. Switching backends later doesn't touch old files:
+   whatever was uploaded under the old backend just keeps working.
+   ============================================================ */
+
+/* --- fill these in ONLY when you're ready to move to Cloudinary ---
+   1. Create a free account at https://cloudinary.com (no card needed)
+   2. Settings → Upload → add an "Unsigned" upload preset
+   3. Paste your cloud name + that preset's name below              */
+const CLOUDINARY_CONFIG = {
+  cloudName: "jaddfxd6",       // Al-Ayada clinic's Cloudinary cloud name
+  uploadPreset: "clinic_uploads" // unsigned upload preset created in Cloudinary → Settings → Upload
+};
+function cloudinaryEnabled() {
+  return !!(CLOUDINARY_CONFIG.cloudName && CLOUDINARY_CONFIG.uploadPreset);
 }
 
-/* Uploads one file (image or PDF) to Storage, then writes its metadata
-   into the Realtime DB list for this patient. Throws a friendly Arabic
-   message on validation failure so callers can show it as-is. */
+const ATTACHMENT_ACCEPTED_TYPES = /^image\/|^application\/pdf$/;
+const ATTACHMENT_MAX_MB_CLOUDINARY = 15; // Cloudinary's free tier easily allows this
+const ATTACHMENT_MAX_MB_BASE64 = 3;      // kept small — this counts directly against the free DB quota
+function attachmentMaxMb() { return cloudinaryEnabled() ? ATTACHMENT_MAX_MB_CLOUDINARY : ATTACHMENT_MAX_MB_BASE64; }
+
+/* Resizes/re-compresses an image client-side before it's turned into
+   base64, so a phone photo (often 3-5MB straight out of the camera)
+   doesn't eat the free database quota in a couple of uploads. Only
+   used on the base64 path — Cloudinary can take the original file
+   as-is. PDFs are never touched (can't be "resized"). */
+async function compressImageFile(file, maxDimension = 1280, quality = 0.72) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    return blob || file;
+  } catch {
+    return file; // compression is a best-effort optimization — never block the upload on it
+  }
+}
+
+function fileToBase64(blobOrFile) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result); // "data:<mime>;base64,...."
+    reader.onerror = () => reject(new Error("تعذّرت قراءة الملف."));
+    reader.readAsDataURL(blobOrFile);
+  });
+}
+
+/* Cloudinary's "unsigned upload" endpoint accepts direct browser
+   uploads with no backend and no exposed secret — safe to call from
+   client-side code like the rest of this app. PDFs must go through
+   the "raw" resource type; images go through "image". */
+async function uploadToCloudinary(file) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("upload_preset", CLOUDINARY_CONFIG.uploadPreset);
+  const resourceType = file.type === "application/pdf" ? "raw" : "image";
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/${resourceType}/upload`, { method: "POST", body: form });
+  if (!res.ok) throw new Error("تعذّر رفع الملف — تأكدي من إعدادات Cloudinary أو حاولي مرة أخرى.");
+  const data = await res.json();
+  return { url: data.secure_url, publicId: data.public_id };
+}
+
+/* Uploads one file (image or PDF) through whichever backend is
+   currently active, then writes its metadata into the Realtime DB
+   list for this patient. Throws a friendly Arabic message on
+   validation failure so callers can show it as-is. */
 async function uploadPatientAttachment(patientId, file) {
   if (!file) return;
   if (!ATTACHMENT_ACCEPTED_TYPES.test(file.type)) {
     throw new Error("الملفات المسموح بها: صور أو PDF فقط.");
   }
-  if (file.size > ATTACHMENT_MAX_MB * 1024 * 1024) {
-    throw new Error(`حجم الملف أكبر من ${ATTACHMENT_MAX_MB} ميجابايت — اختاري ملفًا أصغر.`);
-  }
+  const isPdf = file.type === "application/pdf";
   const listRef = push(ref(db, t(`patientAttachments/${patientId}`)));
-  const fileId = listRef.key;
-  const safeName = (file.name || "ملف").replace(/[^\w.\u0600-\u06FF-]+/g, "_");
-  const path = attachmentStoragePath(patientId, fileId, safeName);
-  await uploadBytes(storageRef(storage, path), file, { contentType: file.type });
-  const url = await getDownloadURL(storageRef(storage, path));
-  const meta = {
-    name: file.name || safeName,
-    url, path,
-    kind: file.type === "application/pdf" ? "pdf" : "image",
-    size: file.size,
+  const baseMeta = {
+    name: file.name || "ملف",
+    kind: isPdf ? "pdf" : "image",
     uploadedBy: me.uid,
     uploadedByName: me.name || (me.role === "doctor" ? "الطبيب" : "السكرتارية"),
     uploadedAt: serverTimestamp()
   };
-  await set(listRef, meta);
-  return { id: fileId, ...meta };
+
+  if (cloudinaryEnabled()) {
+    if (file.size > ATTACHMENT_MAX_MB_CLOUDINARY * 1024 * 1024) {
+      throw new Error(`حجم الملف أكبر من ${ATTACHMENT_MAX_MB_CLOUDINARY} ميجابايت — اختاري ملفًا أصغر.`);
+    }
+    const uploaded = await uploadToCloudinary(file);
+    await set(listRef, { ...baseMeta, source: "cloudinary", url: uploaded.url, publicId: uploaded.publicId, size: file.size });
+  } else {
+    const toEncode = isPdf ? file : await compressImageFile(file);
+    if (toEncode.size > ATTACHMENT_MAX_MB_BASE64 * 1024 * 1024) {
+      throw new Error(`حجم الملف أكبر من ${ATTACHMENT_MAX_MB_BASE64} ميجابايت — التخزين الحالي مجاني ومحدود المساحة، اختاري ملفًا أصغر.`);
+    }
+    const dataUrl = await fileToBase64(toEncode);
+    await set(listRef, { ...baseMeta, source: "base64", url: dataUrl, size: toEncode.size });
+  }
+  return { id: listRef.key, ...baseMeta };
 }
 
 function subscribePatientAttachments(patientId, callback) {
@@ -1272,12 +1342,15 @@ function subscribePatientAttachments(patientId, callback) {
   return () => off(listRef, "value", handler);
 }
 
-/* Removes both the DB record and the underlying Storage object. The
-   Storage delete is best-effort (ignored if already missing) so a
-   half-finished previous delete can never block this one. */
+/* Removes the database record. For base64 files that's the whole
+   file gone immediately. For Cloudinary files, note that unsigned
+   uploads intentionally can't be deleted from client-side code (that
+   requires a signed request with your API secret, which must never
+   be shipped to the browser) — the record disappearing from the app
+   is what actually matters day-to-day; the underlying file can be
+   pruned later from the Cloudinary dashboard if you ever need to. */
 async function deletePatientAttachment(patientId, attachment) {
   await set(ref(db, t(`patientAttachments/${patientId}/${attachment.id}`)), null);
-  if (attachment.path) await deleteObject(storageRef(storage, attachment.path)).catch(() => {});
 }
 
 /* ============================================================
@@ -1298,7 +1371,7 @@ function attachmentsPanelHTML(idPrefix) {
           <button type="button" class="btn btn-ghost btn-sm" id="${idPrefix}-file-btn">📁 من الجهاز / PDF</button>
         </div>
       </div>
-      <p style="color:var(--ink-soft);font-size:.8rem;margin:4px 0 12px;">صورة روشتة أو نتيجة تحليل، أو ملف PDF — لحد ${ATTACHMENT_MAX_MB} ميجا للملف.</p>
+      <p style="color:var(--ink-soft);font-size:.8rem;margin:4px 0 12px;">صورة روشتة أو نتيجة تحليل، أو ملف PDF — لحد ${attachmentMaxMb()} ميجا للملف.</p>
       <input type="file" id="${idPrefix}-camera-input" accept="image/*" capture="environment" style="display:none;">
       <input type="file" id="${idPrefix}-file-input" accept="image/*,application/pdf" multiple style="display:none;">
       <div class="error-msg" id="${idPrefix}-msg"></div>
