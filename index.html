@@ -70,7 +70,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   }
   .user-card strong { display:inline; font-size:.85rem; }
   .user-card span { display:none; } /* branch id hidden to save space on mobile */
-  .user-card button { margin-top:0; padding:6px 10px; font-size:.72rem; white-space:nowrap; }
+  .user-card button { display:none; } /* removed from the compact top bar — now lives only in the drawer (see body.drawer-open below) */
 
   .main { padding:18px 16px calc(90px + env(safe-area-inset-bottom)); }
   .main-header h1 { font-size:1.25rem; }
@@ -307,7 +307,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <main class="main">
-    <div class="main-header">
+    <div class="main-header" id="main-header">
       <h1 id="view-title">—</h1>
       <div class="date" id="today-date"></div>
     </div>
@@ -1482,10 +1482,15 @@ function showApp() {
    and the mobile bottom bar, so both stay in sync automatically.
    ============================================================ */
 const ALL_SECTIONS = ["sec-view-queue", "sec-view-appointments", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-finance", "view-settings"];
+// These pages lead with the sticky search bar instead of a page
+// title, so the title/date row is hidden and the search bar sits
+// right at the top.
+const SECTIONS_WITHOUT_HEADER = ["doc-view-chart", "sec-view-patients"];
 
 function showSection(id, title) {
   ALL_SECTIONS.forEach(s => document.getElementById(s).style.display = s === id ? "" : "none");
   document.getElementById("view-title").textContent = title;
+  document.getElementById("main-header").style.display = SECTIONS_WITHOUT_HEADER.includes(id) ? "none" : "";
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.target === id));
 }
 
