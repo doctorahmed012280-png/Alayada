@@ -41,6 +41,27 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 .user-card { margin-top:auto; padding-top:16px; border-top:1px solid rgba(245,241,232,.15); font-size:.85rem; color:#C9C2AD; }
 .user-card strong { display:block; color:#F5F1E8; font-size:.95rem; margin-bottom:2px; }
 .user-card button { margin-top:10px; background:none; border:1px solid rgba(245,241,232,.3); color:#F5F1E8; padding:6px 12px; border-radius:var(--radius-sm); cursor:pointer; }
+
+/* ---- Sidebar search slot ----
+   On pages that lead with a search box (finding/opening a case),
+   the brand mark and the signed-in user's name are swapped out for
+   a search field + "add new case" button, right inside the sidebar
+   bar. This keeps the search reachable at all times while scrolling
+   and frees up the vertical space at the top of the page for
+   future content. Hidden by default; toggled on by showSection()
+   via body.topbar-search-mode, and never while the mobile nav
+   drawer is open (the drawer needs the normal brand/user card). */
+.sidebar-search-slot { display:none; }
+body.topbar-search-mode:not(.drawer-open) #sidebar-brand,
+body.topbar-search-mode:not(.drawer-open) #sidebar-user-card { display:none; }
+body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; flex:1; min-width:0; }
+.topbar-search-group { display:none; flex:1; min-width:0; gap:8px; align-items:center; }
+.topbar-search-group .search-field-wrap { flex:1; min-width:0; position:relative; margin-bottom:0; }
+.topbar-search-group .search-field-wrap input { width:100%; padding:9px 12px; font-size:16px; border-radius:var(--radius-sm); border:1px solid var(--line); background:#FBF9F4; color:var(--ink); }
+.topbar-search-group .search-field-wrap input:focus { border-color:var(--primary); background:#fff; }
+.topbar-search-group .search-dropdown { position:absolute; top:calc(100% + 4px); inset-inline:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:#fff; box-shadow:var(--shadow); z-index:60; overflow:hidden; }
+.topbar-search-group .btn { flex-shrink:0; white-space:nowrap; }
+
 .main { padding:32px 40px; overflow-y:auto; }
 .main-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
 .main-header .date { color:var(--ink-soft); font-size:.95rem; }
@@ -78,7 +99,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   .grid-2, .grid-3 { grid-template-columns:1fr; }
   .field-row { grid-template-columns:1fr; }
   .panel { padding:18px; border-radius:12px; }
-  .search-top-bar { top:var(--mobile-header-h, 60px); }
+  .topbar-search-group .btn-sm { padding:6px 10px; font-size:.78rem; }
 
   .login-wrap { padding:16px; }
   .login-card { width:100%; max-width:400px; padding:32px 24px; }
@@ -151,24 +172,15 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   .main { padding:14px 12px calc(90px + env(safe-area-inset-bottom)); }
   .bottom-nav button { font-size:.62rem; padding:7px 2px; }
   .bottom-nav button .bn-icon { font-size:1.15rem; }
+  .topbar-search-group { gap:5px; }
+  .topbar-search-group .search-field-wrap input { padding:8px 8px; }
+  .topbar-search-group .btn-sm { padding:6px 8px; font-size:.72rem; }
 }
 
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); }
 .panel + .panel { margin-top:20px; }
 .grid-2 { display:grid; grid-template-columns:1.1fr .9fr; gap:20px; align-items:start; }
 
-/* ---- Sticky "search + add new patient" bar ----
-   Used at the top of the doctor's chart page and the secretary's
-   patient-search page: input and button sit in one row, and the
-   whole bar stays pinned while the rest of the page scrolls. The
-   `top` offset is filled in by JS (--mobile-header-h) so it clears
-   the sticky mobile top bar instead of hiding underneath it. */
-.search-top-bar { position:sticky; top:0; z-index:15; margin-bottom:20px; }
-.search-inline-row { display:flex; gap:10px; align-items:flex-start; }
-.search-inline-row .search-field-wrap { flex:1; position:relative; margin-bottom:0; }
-.search-inline-row .search-field-wrap input { width:100%; }
-.search-inline-row .search-dropdown { position:absolute; top:calc(100% + 4px); inset-inline:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:#fff; box-shadow:var(--shadow); z-index:20; overflow:hidden; }
-.search-inline-row .btn { white-space:nowrap; flex-shrink:0; }
 @media (max-width:980px){ .grid-2{grid-template-columns:1fr;} }
 
 .btn { display:inline-flex; align-items:center; gap:6px; border:none; border-radius:var(--radius-sm); padding:10px 18px; font-weight:700; cursor:pointer; font-size:.93rem; transition:transform .1s,opacity .15s; }
@@ -268,7 +280,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   <div class="login-card">
     <div class="login-brand">
       <div class="display">الـعـيـادة<span style="color:var(--accent)">.</span></div>
-      <div class="tag">نظام إدارة عيادات النساء والتوليد</div>
+      <div class="tag">نظام إدارة العيادات الطبية</div>
     </div>
 
     <button type="button" id="google-signin-btn" class="btn btn-ghost" style="width:100%;justify-content:center;padding:12px;">
@@ -296,9 +308,30 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 <div class="app-shell" id="screen-app" style="display:none;">
   <aside class="sidebar">
     <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle-btn" aria-label="فتح القائمة">☰</button>
-    <div class="brand">الـعـيـادة<span>.</span></div>
+    <div class="brand" id="sidebar-brand">الـعـيـادة<span>.</span></div>
+
+    <!-- Swapped in place of the brand/user name on search-led pages
+         (see .sidebar-search-slot in <style>) — holds one search box
+         per page, only one shown at a time via showSection(). -->
+    <div class="sidebar-search-slot" id="sidebar-search-slot">
+      <div class="topbar-search-group" id="topbar-search-sec-patients">
+        <div class="field search-field-wrap">
+          <input id="p-search" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off" aria-label="ابحثي عن حالة">
+          <div id="p-search-dropdown" class="search-dropdown" style="display:none;"></div>
+        </div>
+        <button type="button" class="btn btn-accent btn-sm" id="p-open-new-patient-btn">+ حالة جديدة</button>
+      </div>
+      <div class="topbar-search-group" id="topbar-search-doc-chart">
+        <div class="field search-field-wrap">
+          <input id="c-search" type="text" placeholder="ابحث بالاسم أو رقم الهاتف لفتح الملف الطبي" autocomplete="off" aria-label="ابحث عن حالة">
+          <div id="c-search-dropdown" class="search-dropdown" style="display:none;"></div>
+        </div>
+        <button type="button" class="btn btn-accent btn-sm" id="c-open-new-patient-btn">+ حالة جديدة</button>
+      </div>
+    </div>
+
     <ul class="nav-list" id="nav-list"></ul>
-    <div class="user-card">
+    <div class="user-card" id="sidebar-user-card">
       <strong id="user-name">—</strong>
       <span id="user-branch">—</span>
       <div><button id="logout-btn">تسجيل الخروج</button></div>
@@ -316,7 +349,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       <div class="grid-2">
         <div class="panel">
           <h3>تسجيل حالة في الدور</h3>
-          <div class="field"><label for="q-phone">اسم المريضة أو رقم الهاتف</label><input id="q-phone" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off"></div>
+          <div class="field"><label for="q-phone">اسم الحالة أو رقم الهاتف</label><input id="q-phone" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off"></div>
           <div id="q-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div id="q-patient-found" class="empty-state" style="display:none;"></div>
           <div class="field"><label for="q-doctor">الطبيب المعالج</label><select id="q-doctor"></select></div>
@@ -338,7 +371,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
         </div>
         <div class="panel">
           <h3>دور اليوم</h3>
-          <ul class="queue-list" id="queue-list"><li class="empty-state">لا يوجد مرضى في الدور بعد</li></ul>
+          <ul class="queue-list" id="queue-list"><li class="empty-state">لا توجد حالات في الدور بعد</li></ul>
         </div>
       </div>
     </section>
@@ -352,26 +385,20 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       <div class="panel">
         <h3>حجوزات النهاردة</h3>
         <p style="color:var(--ink-soft);font-size:.85rem;margin-top:-6px;">
-          كل الحجوزات المسجّلة على أي دكتور في الفرع اليوم. استخدمي زر الاتصال أو واتساب لتذكير المريضة بموعدها.
+          كل الحجوزات المسجّلة على أي دكتور في الفرع اليوم. استخدمي زر الاتصال أو واتساب لتذكير الحالة بموعدها.
         </p>
         <ul class="queue-list" id="sec-appts-today-list"><li class="empty-state">لا توجد حجوزات لليوم</li></ul>
       </div>
     </section>
 
     <!-- ===== SECRETARY: patients ===== -->
+    <!-- Search box + "add new case" button for this page live in the
+         sidebar now (#topbar-search-sec-patients) instead of a panel
+         here, so this section starts right at the results. -->
     <section id="sec-view-patients" style="display:none;">
-      <div class="panel search-top-bar">
-        <div class="search-inline-row">
-          <div class="field search-field-wrap">
-            <input id="p-search" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off" aria-label="ابحثي عن مريضة">
-            <div id="p-search-dropdown" class="search-dropdown" style="display:none;"></div>
-          </div>
-          <button type="button" class="btn btn-accent btn-sm" id="p-open-new-patient-btn">+ مريضة جديدة</button>
-        </div>
-      </div>
       <div class="panel">
         <h3>نتيجة البحث</h3>
-        <div id="p-result" class="empty-state"><div class="icon">🔍</div>ابحثي بالاسم أو رقم الهاتف لعرض بيانات المريضة</div>
+        <div id="p-result" class="empty-state"><div class="icon">🔍</div>ابحثي بالاسم أو رقم الهاتف لعرض بيانات الحالة</div>
       </div>
     </section>
 
@@ -382,7 +409,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       <div class="panel">
         <h3>فواتير محتاجة تحصيل</h3>
         <p style="color:var(--ink-soft);font-size:.85rem;margin-top:-6px;">
-          الفاتورة بتتصدر من الدكتور بعد الكشف أو مباشرة من عنده. دورك هنا إنك تحصّلي المبلغ من المريضة
+          الفاتورة بتتصدر من الدكتور بعد الكشف أو مباشرة من عنده. دورك هنا إنك تحصّلي المبلغ من الحالة
           وتضغطي "تم التحصيل" — الحساب النهائي بيتراجع مع الدكتور آخر اليوم من تقريره.
         </p>
         <ul class="queue-list" id="collections-list"><li class="empty-state">لا توجد فواتير محتاجة تحصيل حاليًا</li></ul>
@@ -393,7 +420,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     <section id="doc-view-queue" style="display:none;">
       <div class="panel">
         <h3>الحالات المؤكدة النهاردة</h3>
-        <ul class="queue-list" id="doc-queue-list"><li class="empty-state">لا يوجد مرضى في دورك الآن</li></ul>
+        <ul class="queue-list" id="doc-queue-list"><li class="empty-state">لا توجد حالات في دورك الآن</li></ul>
       </div>
       <div class="panel">
         <h3>محجوزة النهاردة ولسه ما وصلتش</h3>
@@ -406,17 +433,11 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     </section>
 
     <!-- ===== DOCTOR: chart ===== -->
+    <!-- Search box + "add new case" button for this page live in the
+         sidebar now (#topbar-search-doc-chart) instead of a panel
+         here, so this section starts right at the case file. -->
     <section id="doc-view-chart" style="display:none;">
-      <div class="panel search-top-bar">
-        <div class="search-inline-row">
-          <div class="field search-field-wrap">
-            <input id="c-search" type="text" placeholder="ابحث بالاسم أو رقم الهاتف لفتح ملفها الطبي" autocomplete="off" aria-label="ابحث عن مريضة">
-            <div id="c-search-dropdown" class="search-dropdown" style="display:none;"></div>
-          </div>
-          <button type="button" class="btn btn-accent btn-sm" id="c-open-new-patient-btn">+ مريضة جديدة</button>
-        </div>
-      </div>
-      <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري مريضة من دورك، أو ابحثي عنها بالأعلى لفتح ملفها</div>
+      <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري حالة من الدور، أو ابحثي عنها بالأعلى لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
         <div class="panel">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
@@ -561,7 +582,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
             <h3 id="modal-new-invoice-title">فاتورة جديدة (سونار / بند إضافي...)</h3>
             <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
           </div>
-          <div class="field"><label for="fb-phone">اسم المريضة أو رقم الهاتف</label><input id="fb-phone" type="text" placeholder="ابحث بالاسم أو رقم الهاتف" autocomplete="off"></div>
+          <div class="field"><label for="fb-phone">اسم الحالة أو رقم الهاتف</label><input id="fb-phone" type="text" placeholder="ابحث بالاسم أو رقم الهاتف" autocomplete="off"></div>
           <div id="fb-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
           <div class="field-row">
             <div class="field"><label>الكشف</label><input id="fb-consult" type="number" value="0" class="num"></div>
@@ -630,8 +651,8 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     </section>
 
     <!-- ===== SHARED MODAL: register a new patient =====
-         Used from both the secretary's "بحث عن المرضى" page and the
-         doctor's "ملف المريضة" page, so a doctor can register a
+         Used from both the secretary's "بحث عن الحالات" page and the
+         doctor's "ملف الحالة" page, so a doctor can register a
          walk-in patient herself when no secretary is on shift. One
          form, one save handler (wireNewPatientModal in the script
          below) — openNewPatientModal(onCreated) decides what happens
@@ -639,7 +660,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     <div class="modal-overlay" id="modal-new-patient">
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-new-patient-title">
         <div class="modal-box-header">
-          <h3 id="modal-new-patient-title">تسجيل مريضة جديدة</h3>
+          <h3 id="modal-new-patient-title">تسجيل حالة جديدة</h3>
           <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
         </div>
         <div class="field-row">
@@ -663,7 +684,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
         <div class="field"><label>بيانات إضافية (اختياري)</label></div>
         <div id="np-cf-list"></div>
         <button type="button" class="btn btn-ghost btn-sm" id="np-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
-        <button class="btn btn-accent" id="np-create-btn">حفظ المريضة</button>
+        <button class="btn btn-accent" id="np-create-btn">حفظ الحالة</button>
         <div class="error-msg" id="np-save-msg"></div>
       </div>
     </div>
@@ -1418,10 +1439,11 @@ document.getElementById("nav-list").addEventListener("click", (e) => { if (e.tar
 
 /* Measures the actual rendered height of the mobile top bar (the
    collapsed .sidebar) and exposes it as --mobile-header-h, so any
-   sticky element below it (e.g. .search-top-bar) can offset by that
-   exact amount instead of hiding underneath it. Re-measured on
-   resize/orientation change since the bar's height can vary with
-   font scaling or a longer branch name. */
+   future sticky element below it can offset by that exact amount
+   instead of hiding underneath it. Re-measured on resize/orientation
+   change and whenever a section switch changes the bar's own height
+   (e.g. entering/leaving topbar-search-mode), since it can vary with
+   font scaling, a longer branch name, or the search box appearing. */
 function updateStickyOffsets() {
   const sidebar = document.querySelector(".sidebar");
   if (sidebar) document.documentElement.style.setProperty("--mobile-header-h", `${sidebar.offsetHeight}px`);
@@ -1482,16 +1504,25 @@ function showApp() {
    and the mobile bottom bar, so both stay in sync automatically.
    ============================================================ */
 const ALL_SECTIONS = ["sec-view-queue", "sec-view-appointments", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-finance", "view-settings"];
-// These pages lead with the sticky search bar instead of a page
-// title, so the title/date row is hidden and the search bar sits
-// right at the top.
+// These pages lead with a search box instead of a page title, so the
+// title/date row is hidden and — instead of a bar inside the page —
+// the search box + "add new case" button take over the sidebar/topbar
+// (replacing the brand mark and the signed-in user's name) via
+// TOPBAR_SEARCH_GROUPS below. That keeps the page itself free of a
+// dedicated search row, leaving more room for its actual content.
 const SECTIONS_WITHOUT_HEADER = ["doc-view-chart", "sec-view-patients"];
+const TOPBAR_SEARCH_GROUPS = { "doc-view-chart": "topbar-search-doc-chart", "sec-view-patients": "topbar-search-sec-patients" };
 
 function showSection(id, title) {
   ALL_SECTIONS.forEach(s => document.getElementById(s).style.display = s === id ? "" : "none");
   document.getElementById("view-title").textContent = title;
   document.getElementById("main-header").style.display = SECTIONS_WITHOUT_HEADER.includes(id) ? "none" : "";
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.target === id));
+
+  const activeGroupId = TOPBAR_SEARCH_GROUPS[id];
+  document.body.classList.toggle("topbar-search-mode", !!activeGroupId);
+  document.querySelectorAll(".topbar-search-group").forEach(g => g.style.display = g.id === activeGroupId ? "flex" : "none");
+  updateStickyOffsets();
 }
 
 function buildNav(items) {
@@ -1513,7 +1544,7 @@ function buildSecretaryNav() {
   buildNav([
     { target: "sec-view-queue", label: "الدور اليومي", short: "الدور", icon: "🕒" },
     { target: "sec-view-appointments", label: "حجوزات النهاردة", short: "الحجوزات", icon: "📅" },
-    { target: "sec-view-patients", label: "المرضى", short: "المرضى", icon: "👥" },
+    { target: "sec-view-patients", label: "الحالات", short: "الحالات", icon: "👥" },
     { target: "sec-view-billing", label: "التحصيل", short: "التحصيل", icon: "💵" }
   ]);
   initSecretary();
@@ -1522,7 +1553,7 @@ function buildSecretaryNav() {
 function buildDoctorNav(showSettings) {
   const items = [
     { target: "doc-view-queue", label: "دوري اليوم", short: "دوري", icon: "🕒" },
-    { target: "doc-view-chart", label: "ملف المريضة", short: "الملف", icon: "🩺" },
+    { target: "doc-view-chart", label: "ملف الحالة", short: "الملف", icon: "🩺" },
     { target: "doc-view-finance", label: "الإدارة المالية", short: "المالية", icon: "💰" }
   ];
   if (showSettings) items.push({ target: "view-settings", label: "الإعدادات", short: "الإعدادات", icon: "⚙️" });
@@ -1637,7 +1668,7 @@ function wireQueuePanel() {
   selectPatientForCheckIn = handlePatientFound;
 
   document.getElementById("q-checkin-btn").onclick = async () => {
-    if (!lastFoundPatient) { alert("ابحثي عن المريضة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
+    if (!lastFoundPatient) { alert("ابحثي عن الحالة بالاسم أو رقم الهاتف واختاريها من القائمة أولاً."); return; }
     const doctorId = document.getElementById("q-doctor").value;
     if (!doctorId) { alert("اختاري الطبيب المعالج."); return; }
 
@@ -1668,7 +1699,7 @@ function wireQueuePanel() {
 
 function renderQueue(rows) {
   const list = document.getElementById("queue-list");
-  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في الدور بعد</li>`; return; }
+  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا توجد حالات في الدور بعد</li>`; return; }
   list.innerHTML = "";
   rows.forEach(row => {
     const li = document.createElement("li");
@@ -1752,7 +1783,7 @@ function buildContactButtonsHtml(phone, patientName) {
     : `<span class="appt-contact-none" title="الرقم المسجّل مش بصيغة موبايل مصري صحيحة">واتساب غير متاح</span>`;
   return `
     <div class="appt-contact">
-      <a class="appt-contact-btn call" href="tel:${phone}" title="اتصال بالمريضة" aria-label="اتصال بالمريضة">📞</a>
+      <a class="appt-contact-btn call" href="tel:${phone}" title="اتصال بالحالة" aria-label="اتصال بالحالة">📞</a>
       ${waButton}
     </div>`;
 }
@@ -1860,7 +1891,7 @@ function wireNewPatientModal() {
     const parsedPhone = parseEgyptPhone(phoneRaw);
     if (!parsedPhone.valid) { validatePhoneField(); msg.textContent = parsedPhone.reason; return; }
     const phone = parsedPhone.local; // store the normalized 01xxxxxxxxx form
-    if (await findPatientByPhone(phone)) { msg.textContent = "توجد بالفعل مريضة بهذا الرقم."; return; }
+    if (await findPatientByPhone(phone)) { msg.textContent = "توجد بالفعل حالة بهذا الرقم."; return; }
     const data = { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields };
     const patientId = await createPatient(me.branchId, data);
     closeModal("modal-new-patient");
@@ -1981,7 +2012,7 @@ function renderApptList(listId, rows, showDate) {
 function renderDoctorQueue(rows) {
   const mine = rows.filter(r => r.doctorId === me.uid && r.status !== "cancelled");
   const list = document.getElementById("doc-queue-list");
-  if (!mine.length) { list.innerHTML = `<li class="empty-state">لا يوجد مرضى في دورك الآن</li>`; return; }
+  if (!mine.length) { list.innerHTML = `<li class="empty-state">لا توجد حالات في دورك الآن</li>`; return; }
   list.innerHTML = "";
   mine.forEach(row => {
     const li = document.createElement("li");
@@ -2004,7 +2035,7 @@ function renderDoctorQueue(rows) {
 
 async function openPatientChart(patientId, queueId) {
   currentPatientId = patientId; currentQueueId = queueId || null; currentPregnancyId = null; currentLmp = null;
-  showSection("doc-view-chart", "ملف المريضة");
+  showSection("doc-view-chart", "ملف الحالة");
   document.getElementById("chart-empty").style.display = "none";
   document.getElementById("chart-content").style.display = "";
 
@@ -2317,7 +2348,7 @@ function wireDoctorInvoicePanel() {
     document.getElementById("fb-phone").value = `${patient.name} — ${patient.phone}`;
   });
   document.getElementById("fb-create-btn").onclick = async () => {
-    if (!selectedPatient) { alert("ابحث عن المريضة بالاسم أو رقم الهاتف واخترها من القائمة أولاً."); return; }
+    if (!selectedPatient) { alert("ابحث عن الحالة بالاسم أو رقم الهاتف واخترها من القائمة أولاً."); return; }
     const patient = selectedPatient;
     const items = { consultation: Number(consult.value)||0, ultrasound: Number(sono.value)||0 };
     const extraLabel = document.getElementById("fb-extra-label").value.trim();
