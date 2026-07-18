@@ -45,6 +45,12 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 .main-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
 .main-header .date { color:var(--ink-soft); font-size:.95rem; }
 
+/* Hamburger drawer toggle + overlay — mobile only (see media query
+   below for the open/closed drawer behavior). Hidden on desktop
+   since the sidebar is already fully visible there. */
+.sidebar-toggle-btn { display:none; }
+.sidebar-overlay { display:none; }
+
 /* ---------------- Bottom nav (mobile only) ---------------- */
 .bottom-nav { display:none; }
 
@@ -56,7 +62,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
     flex-direction:row; align-items:center; justify-content:space-between;
     padding:12px 16px; gap:0; position:sticky; top:0; z-index:20;
   }
-  .sidebar .nav-list { display:none; } /* replaced by bottom-nav on mobile */
+  .sidebar .nav-list { display:none; } /* replaced by bottom-nav on mobile; reappears inside the drawer below */
   .sidebar .brand { font-size:1.15rem; }
   .user-card {
     margin-top:0; padding-top:0; border-top:none;
@@ -72,6 +78,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   .grid-2, .grid-3 { grid-template-columns:1fr; }
   .field-row { grid-template-columns:1fr; }
   .panel { padding:18px; border-radius:12px; }
+  .search-top-bar { top:var(--mobile-header-h, 60px); }
 
   .login-wrap { padding:16px; }
   .login-card { width:100%; max-width:400px; padding:32px 24px; }
@@ -90,6 +97,37 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
   }
   .bottom-nav button .bn-icon { font-size:1.3rem; line-height:1; }
   .bottom-nav button.active { color:var(--primary); background:#EAF3EF; }
+
+  /* ---- Hamburger nav drawer (mobile only) ----
+     Same <aside class="sidebar"> element used for the desktop
+     sidebar: while closed it's the compact sticky top bar (rules
+     above); toggling body.drawer-open (in JS) expands it into a
+     full-height slide-out panel with the nav list + logout, without
+     touching the bottom-nav tab bar at all. */
+  .sidebar-toggle-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:38px; height:38px; margin-inline-end:10px; border-radius:var(--radius-sm);
+    background:rgba(245,241,232,.14); border:none; color:#F5F1E8;
+    font-size:1.2rem; line-height:1; cursor:pointer;
+  }
+  .sidebar-overlay {
+    display:none; position:fixed; inset:0; background:rgba(15,20,17,.45); z-index:40;
+  }
+  body.drawer-open .sidebar-overlay { display:block; }
+  body.drawer-open .sidebar {
+    position:fixed; inset-inline-start:0; top:0; bottom:0; width:78vw; max-width:300px;
+    flex-direction:column; align-items:stretch; justify-content:flex-start;
+    padding:22px 18px; gap:22px; z-index:50; overflow-y:auto;
+    box-shadow:0 0 30px rgba(0,0,0,.28);
+  }
+  body.drawer-open .sidebar .nav-list { display:flex; }
+  body.drawer-open .sidebar .user-card {
+    margin-top:auto; padding-top:16px; border-top:1px solid rgba(245,241,232,.15);
+    display:block; font-size:.85rem;
+  }
+  body.drawer-open .sidebar .user-card strong { display:block; font-size:.95rem; }
+  body.drawer-open .sidebar .user-card span { display:block; }
+  body.drawer-open .sidebar .user-card button { display:block; margin-top:10px; padding:6px 12px; font-size:.8rem; }
 
   /* Full-width, easy-to-tap primary actions (small/ghost/danger buttons stay their natural size) */
   .btn-primary:not(.btn-sm), .btn-accent:not(.btn-sm) { width:100%; justify-content:center; padding:13px 18px; }
@@ -118,6 +156,19 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px; box-shadow:var(--shadow); }
 .panel + .panel { margin-top:20px; }
 .grid-2 { display:grid; grid-template-columns:1.1fr .9fr; gap:20px; align-items:start; }
+
+/* ---- Sticky "search + add new patient" bar ----
+   Used at the top of the doctor's chart page and the secretary's
+   patient-search page: input and button sit in one row, and the
+   whole bar stays pinned while the rest of the page scrolls. The
+   `top` offset is filled in by JS (--mobile-header-h) so it clears
+   the sticky mobile top bar instead of hiding underneath it. */
+.search-top-bar { position:sticky; top:0; z-index:15; margin-bottom:20px; }
+.search-inline-row { display:flex; gap:10px; align-items:flex-start; }
+.search-inline-row .search-field-wrap { flex:1; position:relative; margin-bottom:0; }
+.search-inline-row .search-field-wrap input { width:100%; }
+.search-inline-row .search-dropdown { position:absolute; top:calc(100% + 4px); inset-inline:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:#fff; box-shadow:var(--shadow); z-index:20; overflow:hidden; }
+.search-inline-row .btn { white-space:nowrap; flex-shrink:0; }
 @media (max-width:980px){ .grid-2{grid-template-columns:1fr;} }
 
 .btn { display:inline-flex; align-items:center; gap:6px; border:none; border-radius:var(--radius-sm); padding:10px 18px; font-weight:700; cursor:pointer; font-size:.93rem; transition:transform .1s,opacity .15s; }
@@ -244,6 +295,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 <!-- ===================== APP SHELL ===================== -->
 <div class="app-shell" id="screen-app" style="display:none;">
   <aside class="sidebar">
+    <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle-btn" aria-label="فتح القائمة">☰</button>
     <div class="brand">الـعـيـادة<span>.</span></div>
     <ul class="nav-list" id="nav-list"></ul>
     <div class="user-card">
@@ -252,6 +304,7 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
       <div><button id="logout-btn">تسجيل الخروج</button></div>
     </div>
   </aside>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
   <main class="main">
     <div class="main-header">
@@ -307,19 +360,18 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 
     <!-- ===== SECRETARY: patients ===== -->
     <section id="sec-view-patients" style="display:none;">
-      <div class="grid-2">
-        <div class="panel">
-          <h3>بحث عن المرضى</h3>
-          <div class="field"><label for="p-search">ابحثي بالاسم أو رقم الهاتف</label><input id="p-search" type="text" placeholder="اسم المريضة أو رقم الهاتف" autocomplete="off"></div>
-          <div id="p-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
-          <hr style="border:none;border-top:1px solid var(--line);margin:18px 0;">
-          <p style="color:var(--ink-soft);font-size:.85rem;margin-top:0;">مريضة جديدة لسه مش مسجّلة عندنا؟</p>
-          <button type="button" class="btn btn-accent" id="p-open-new-patient-btn">+ تسجيل مريضة جديدة</button>
+      <div class="panel search-top-bar">
+        <div class="search-inline-row">
+          <div class="field search-field-wrap">
+            <input id="p-search" type="text" placeholder="ابحثي بالاسم أو رقم الهاتف" autocomplete="off" aria-label="ابحثي عن مريضة">
+            <div id="p-search-dropdown" class="search-dropdown" style="display:none;"></div>
+          </div>
+          <button type="button" class="btn btn-accent btn-sm" id="p-open-new-patient-btn">+ مريضة جديدة</button>
         </div>
-        <div class="panel">
-          <h3>نتيجة البحث</h3>
-          <div id="p-result" class="empty-state"><div class="icon">🔍</div>ابحثي بالاسم أو رقم الهاتف لعرض بيانات المريضة</div>
-        </div>
+      </div>
+      <div class="panel">
+        <h3>نتيجة البحث</h3>
+        <div id="p-result" class="empty-state"><div class="icon">🔍</div>ابحثي بالاسم أو رقم الهاتف لعرض بيانات المريضة</div>
       </div>
     </section>
 
@@ -355,11 +407,14 @@ button,input,select,textarea { font-family:inherit; font-size:inherit; }
 
     <!-- ===== DOCTOR: chart ===== -->
     <section id="doc-view-chart" style="display:none;">
-      <div class="panel">
-        <h3>البحث عن مريضة</h3>
-        <div class="field"><label for="c-search">ابحث بالاسم أو رقم الهاتف لفتح ملفها الطبي (لو موجودة)</label><input id="c-search" type="text" placeholder="اسم المريضة أو رقم الهاتف" autocomplete="off"></div>
-        <div id="c-search-dropdown" style="display:none;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:-8px;margin-bottom:12px;overflow:hidden;background:#fff;"></div>
-        <button type="button" class="btn btn-ghost btn-sm" id="c-open-new-patient-btn">+ تسجيل مريضة جديدة (لو مفيش سكرتارية)</button>
+      <div class="panel search-top-bar">
+        <div class="search-inline-row">
+          <div class="field search-field-wrap">
+            <input id="c-search" type="text" placeholder="ابحث بالاسم أو رقم الهاتف لفتح ملفها الطبي" autocomplete="off" aria-label="ابحث عن مريضة">
+            <div id="c-search-dropdown" class="search-dropdown" style="display:none;"></div>
+          </div>
+          <button type="button" class="btn btn-accent btn-sm" id="c-open-new-patient-btn">+ مريضة جديدة</button>
+        </div>
       </div>
       <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري مريضة من دورك، أو ابحثي عنها بالأعلى لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
@@ -1345,6 +1400,35 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
 
 document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
 
+/* ============================================================
+   MOBILE NAV DRAWER
+   The sidebar is a real 240px column on desktop; on mobile it's a
+   slim sticky top bar. This lets the hamburger button expand that
+   same element into a full slide-out drawer (nav list + logout)
+   without touching the bottom-nav tab bar at all — both stay
+   available side by side.
+   ============================================================ */
+function openDrawer() { document.body.classList.add("drawer-open"); }
+function closeDrawer() { document.body.classList.remove("drawer-open"); }
+document.getElementById("sidebar-toggle-btn").addEventListener("click", openDrawer);
+document.getElementById("sidebar-overlay").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+// Picking a section from the drawer should close it automatically.
+document.getElementById("nav-list").addEventListener("click", (e) => { if (e.target.closest(".nav-btn")) closeDrawer(); });
+
+/* Measures the actual rendered height of the mobile top bar (the
+   collapsed .sidebar) and exposes it as --mobile-header-h, so any
+   sticky element below it (e.g. .search-top-bar) can offset by that
+   exact amount instead of hiding underneath it. Re-measured on
+   resize/orientation change since the bar's height can vary with
+   font scaling or a longer branch name. */
+function updateStickyOffsets() {
+  const sidebar = document.querySelector(".sidebar");
+  if (sidebar) document.documentElement.style.setProperty("--mobile-header-h", `${sidebar.offsetHeight}px`);
+}
+window.addEventListener("resize", updateStickyOffsets);
+window.addEventListener("load", updateStickyOffsets);
+
 onAuthStateChanged(auth, async (user) => {
   unsubs.forEach(u => u());
   unsubs = [];
@@ -1386,6 +1470,7 @@ function showApp() {
   document.getElementById("user-branch").textContent = me.branchId || "—";
   ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
   wireNewPatientModal();
+  updateStickyOffsets();
   if (me.role === "owner") buildDoctorNav(true);
   else if (me.role === "doctor") buildDoctorNav(false);
   else if (me.role === "secretary") buildSecretaryNav();
