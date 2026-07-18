@@ -238,16 +238,26 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .login-brand { text-align:center; margin-bottom:22px; }
 .login-brand .display { font-size:clamp(1.5rem,8vw,1.9rem); }
 .login-brand .tag { color:var(--ink-soft); font-size:.9rem; }
-/* ---- Patient attachments (prescription / lab-result uploads) ---- */
-.attachments-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:12px; }
-.attachment-card { position:relative; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; background:var(--canvas); display:flex; flex-direction:column; }
-.attachment-thumb { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#fff; }
-.attachment-thumb-pdf { display:flex; align-items:center; justify-content:center; font-size:2.1rem; color:var(--accent); }
+/* ---- Patient attachments (prescription / lab-result uploads) ----
+   Deliberately built with flexbox + a padding-top square trick
+   instead of CSS Grid/aspect-ratio: those are modern properties that
+   some embedded/older WebViews render inconsistently (cards stacking
+   on top of each other instead of wrapping into a row). Flexbox wrap
+   has been reliably supported for years across every browser this
+   app is likely to run in. */
+.attachments-grid { display:flex; flex-wrap:wrap; gap:12px; }
+.attachment-card { position:relative; flex:0 0 calc(33.333% - 8px); max-width:calc(33.333% - 8px); border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; background:var(--canvas); }
+.attachment-thumb-wrap { position:relative; width:100%; padding-top:100%; background:#fff; }
+.attachment-thumb { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
+.attachment-thumb-pdf { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:2.1rem; color:var(--accent); }
 .attachment-meta { padding:6px 8px 8px; }
 .attachment-name { font-size:.76rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .attachment-sub { font-size:.68rem; color:var(--ink-soft); margin-top:2px; }
-.attachment-delete { position:absolute; top:5px; left:5px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(31,42,36,.6); color:#fff; cursor:pointer; font-size:.72rem; line-height:1; display:flex; align-items:center; justify-content:center; }
+.attachment-delete { position:absolute; top:5px; left:5px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(31,42,36,.6); color:#fff; cursor:pointer; font-size:.72rem; line-height:1; display:flex; align-items:center; justify-content:center; z-index:2; }
 .attachment-delete:hover { background:var(--st-cancelled); }
+@media (max-width: 480px) {
+  .attachment-card { flex:0 0 calc(50% - 6px); max-width:calc(50% - 6px); }
+}
 
 .error-msg { color:var(--st-cancelled); font-size:.85rem; min-height:1.2em; margin-top:4px; }
 
@@ -1423,8 +1433,8 @@ function renderAttachmentsList(list, patientId, rows) {
     const card = document.createElement("div");
     card.className = "attachment-card";
     const thumb = a.kind === "pdf"
-      ? `<div class="attachment-thumb attachment-thumb-pdf">📄</div>`
-      : `<img class="attachment-thumb" src="${a.url}" alt="${a.name}" loading="lazy">`;
+      ? `<div class="attachment-thumb-wrap"><div class="attachment-thumb-pdf">📄</div></div>`
+      : `<div class="attachment-thumb-wrap"><img class="attachment-thumb" src="${a.url}" alt="${a.name}" loading="lazy"></div>`;
     card.innerHTML = `
       <a href="${a.url}" target="_blank" rel="noopener noreferrer">${thumb}</a>
       <div class="attachment-meta">
