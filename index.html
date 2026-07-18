@@ -796,7 +796,18 @@ function populateMarkazSelect(selectEl, governorate) {
 }
 
 const QUEUE_STATUS_LABELS = { "waiting": "في الانتظار", "in-clinic": "داخل الكشف", "done": "تم الكشف", "cancelled": "ملغي" };
-function todayKey() { return new Date().toISOString().slice(0, 10); }
+/* Local calendar date as YYYY-MM-DD. Deliberately NOT
+   `new Date().toISOString().slice(0,10)` — that reads UTC, which
+   would silently roll back to "yesterday" during the first 2-3 hours
+   after local midnight in Egypt (UTC+2/+3), scattering that night's
+   queue/appointments across two different date buckets. */
+function todayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 /* ============================================================
    CUSTOM FIELDS WIDGET (reusable everywhere: patients, invoices,
@@ -1539,7 +1550,18 @@ function wireQueuePanel() {
     });
 
     const queueId = await checkInPatient({ branchId: me.branchId, patientId: lastFoundPatient.id, patientName: lastFoundPatient.name, doctorId, createdBy: me.uid });
-    if (lastFoundAppointment) { await confirmAppointment(lastFoundAppointment.date, lastFoundAppointment.id, queueId, invoiceId); }
+
+    // Re-check for the unconfirmed reservation right now instead of trusting
+    // the value captured back when she was searched — closes any gap where
+    // it went stale, and a failure here must never block the checkin she
+    // already paid for from finishing and resetting the form.
+    try {
+      const appointmentToConfirm = lastFoundAppointment || await findTodaysUnconfirmedAppointment(lastFoundPatient.id);
+      if (appointmentToConfirm) await confirmAppointment(appointmentToConfirm.date, appointmentToConfirm.id, queueId, invoiceId);
+    } catch (err) {
+      console.error("confirmAppointment failed", err);
+      alert("تم تسجيل الدخول للدور، لكن حصل خطأ في تأكيد الحجز — ممكن يفضل ظاهر في تاب الحجوزات.");
+    }
 
     phoneInput.value = ""; foundBox.style.display = "none"; paymentBox.style.display = "none";
     lastFoundPatient = null; lastFoundAppointment = null;
