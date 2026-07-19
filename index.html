@@ -352,9 +352,12 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .image-viewer-counter { font-family:'IBM Plex Mono',monospace; font-size:.85rem; color:#E9E4D6; background:rgba(245,241,232,.12); padding:5px 12px; border-radius:999px; }
 .image-viewer-overlay .modal-close-btn { color:#F5F1E8; background:rgba(245,241,232,.12); }
 .image-viewer-overlay .modal-close-btn:hover { background:rgba(245,241,232,.22); color:#fff; }
-.image-viewer-stage { position:relative; width:100%; max-width:960px; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; touch-action:pan-y; }
-.image-viewer-img { max-width:100%; max-height:78vh; object-fit:contain; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.5); background:#111; opacity:0; transition:opacity .18s ease; }
+.image-viewer-stage { position:relative; width:100%; max-width:960px; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; touch-action:pan-y; overflow:hidden; }
+.image-viewer-img { max-width:100%; max-height:78vh; object-fit:contain; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.5); background:#111; opacity:0; transition:opacity .18s ease, transform .12s ease; transform-origin:center center; cursor:zoom-in; touch-action:none; user-select:none; -webkit-user-drag:none; }
 .image-viewer-img.is-loaded { opacity:1; }
+.image-viewer-img.is-zoomed { cursor:grab; }
+.image-viewer-img.is-zoomed.is-dragging { cursor:grabbing; }
+.image-viewer-img.is-dragging, .image-viewer-img.is-pinching { transition:opacity .18s ease; } /* no transform easing while actively gesturing — keeps drag/pinch 1:1 with the finger/cursor */
 .image-viewer-nav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:50%; border:none; background:rgba(245,241,232,.14); color:#fff; font-size:1.5rem; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s ease, transform .15s ease; z-index:2; }
 .image-viewer-nav:hover { background:rgba(245,241,232,.28); }
 .image-viewer-nav:active { transform:translateY(-50%) scale(.94); }
@@ -364,11 +367,23 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .image-viewer-prev { right:8px; }
 .image-viewer-next { left:8px; }
 .image-viewer-nav[hidden] { display:none; }
+/* ---- Zoom / rotate / open-original toolbar ----
+   A pill-shaped control bar under the image. Buttons reuse the same
+   translucent-on-dark treatment as the nav arrows above for visual
+   consistency within the lightbox. */
+.image-viewer-toolbar { display:flex; align-items:center; justify-content:center; gap:6px; background:rgba(245,241,232,.10); padding:6px 10px; border-radius:999px; flex-wrap:wrap; }
+.image-viewer-toolbar button, .image-viewer-toolbar a { width:36px; height:36px; border-radius:50%; border:none; background:rgba(245,241,232,.14); color:#fff; font-size:1.05rem; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; text-decoration:none; transition:background .15s ease, transform .15s ease, opacity .15s ease; }
+.image-viewer-toolbar button:hover, .image-viewer-toolbar a:hover { background:rgba(245,241,232,.28); }
+.image-viewer-toolbar button:active, .image-viewer-toolbar a:active { transform:scale(.94); }
+.image-viewer-toolbar button:disabled { opacity:.35; cursor:not-allowed; background:rgba(245,241,232,.08); }
+.image-viewer-toolbar .image-viewer-divider { width:1px; height:22px; background:rgba(245,241,232,.2); margin:0 2px; }
+.image-viewer-zoom-level { min-width:50px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:.78rem; color:#E9E4D6; user-select:none; }
 .image-viewer-name { max-width:960px; width:100%; text-align:center; color:#C9C2AD; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 @media (max-width:760px) {
   .image-viewer-overlay { padding:14px; gap:10px; }
   .image-viewer-nav { width:38px; height:38px; font-size:1.25rem; }
-  .image-viewer-img { max-height:68vh; }
+  .image-viewer-img { max-height:64vh; }
+  .image-viewer-toolbar button, .image-viewer-toolbar a { width:34px; height:34px; font-size:.95rem; }
 }
 </style>
 </head>
@@ -834,6 +849,16 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
         <button type="button" class="image-viewer-nav image-viewer-prev" id="image-viewer-prev" aria-label="الصورة السابقة">›</button>
         <img class="image-viewer-img" id="image-viewer-img" src="" alt="">
         <button type="button" class="image-viewer-nav image-viewer-next" id="image-viewer-next" aria-label="الصورة التالية">‹</button>
+      </div>
+      <div class="image-viewer-toolbar" id="image-viewer-toolbar">
+        <button type="button" id="image-viewer-zoom-out" aria-label="تصغير">−</button>
+        <span class="image-viewer-zoom-level" id="image-viewer-zoom-level">100%</span>
+        <button type="button" id="image-viewer-zoom-in" aria-label="تكبير">+</button>
+        <span class="image-viewer-divider"></span>
+        <button type="button" id="image-viewer-rotate" aria-label="تدوير الصورة">⟳</button>
+        <button type="button" id="image-viewer-zoom-reset" aria-label="إعادة ضبط التكبير والتدوير">⤾</button>
+        <span class="image-viewer-divider"></span>
+        <a id="image-viewer-open-original" href="#" target="_blank" rel="noopener noreferrer" aria-label="فتح الصورة الأصلية في تبويب جديد">⤢</a>
       </div>
       <div class="image-viewer-name" id="image-viewer-name"></div>
     </div>
@@ -1864,17 +1889,29 @@ function renderAttachmentsList(list, patientId, rows) {
 }
 
 /* ============================================================
-   ATTACHMENT IMAGE VIEWER (full-screen lightbox with prev/next)
+   ATTACHMENT IMAGE VIEWER (full-screen lightbox with prev/next,
+   zoom & pan)
    Lets staff page through every photo attached to a patient — camera
    captures, gallery picks, lab results — without closing a tab and
-   reopening the next image from the grid every single time. Shares
-   the app's generic modal-overlay plumbing (openModal/closeModal,
-   Escape-to-close, click-outside-to-close, wired once for every
-   ".modal-overlay" in the DOM); only the paging/keyboard/swipe
-   behavior below is specific to this viewer.
+   reopening the next image from the grid every single time, AND
+   zoom in for a close, detailed look (small handwriting on a
+   prescription, fine print on a lab result...). Shares the app's
+   generic modal-overlay plumbing (openModal/closeModal, Escape-to-
+   close, click-outside-to-close, wired once for every ".modal-
+   overlay" in the DOM); everything below — paging, keyboard, swipe,
+   zoom, pan, rotate — is specific to this viewer.
    ============================================================ */
 let imageViewerItems = [];
 let imageViewerIndex = 0;
+
+// Zoom/pan/rotate state for whichever image is currently shown. Reset to
+// these defaults every time the image changes (see resetImageViewerTransform).
+const IMAGE_VIEWER_MIN_SCALE = 1;
+const IMAGE_VIEWER_MAX_SCALE = 4;
+const IMAGE_VIEWER_STEP = 0.5;      // per click on the +/- buttons or +/- keys
+const IMAGE_VIEWER_WHEEL_STEP = 0.25; // per mouse-wheel notch
+const IMAGE_VIEWER_DBLTAP_SCALE = 2.2; // scale used by double-click/double-tap-to-zoom
+const imageViewerTransform = { scale: 1, panX: 0, panY: 0, rotate: 0 };
 
 function openAttachmentImageViewer(items, startIndex) {
   if (!items.length) return;
@@ -1897,9 +1934,13 @@ function renderImageViewerFrame() {
   img.alt = item.name || "";
   document.getElementById("image-viewer-name").textContent = item.name || "";
   document.getElementById("image-viewer-counter").textContent = total > 1 ? `${imageViewerIndex + 1} / ${total}` : "";
+  document.getElementById("image-viewer-open-original").href = item.url;
   const multi = total > 1;
   document.getElementById("image-viewer-prev").hidden = !multi;
   document.getElementById("image-viewer-next").hidden = !multi;
+  // A fresh image always starts un-zoomed, centered and un-rotated —
+  // carrying over the previous photo's zoom level would be confusing.
+  resetImageViewerTransform();
 }
 
 function imageViewerStep(delta) {
@@ -1920,21 +1961,183 @@ document.addEventListener("keydown", (e) => {
   if (document.getElementById("modal-image-viewer").style.display !== "flex") return;
   if (e.key === "ArrowLeft") imageViewerStep(1);
   else if (e.key === "ArrowRight") imageViewerStep(-1);
+  else if (e.key === "+" || e.key === "=") imageViewerZoomTo(imageViewerTransform.scale + IMAGE_VIEWER_STEP);
+  else if (e.key === "-" || e.key === "_") imageViewerZoomTo(imageViewerTransform.scale - IMAGE_VIEWER_STEP);
+  else if (e.key === "0") resetImageViewerTransform();
 });
 
-// Touch swipe support for mobile — same physical-direction mapping as the
-// keyboard handler above.
+/* ---- Zoom / pan / rotate engine ----
+   `imageViewerTransform` is applied to the <img> as a single CSS
+   transform: translate (pan) → rotate → scale (zoom). All gestures
+   below (buttons, wheel, pinch, drag, double-click/tap) just update
+   this one piece of state and call applyImageViewerTransform(). */
+function applyImageViewerTransform() {
+  const img = document.getElementById("image-viewer-img");
+  const { scale, panX, panY, rotate } = imageViewerTransform;
+  img.style.transform = `translate(${panX}px, ${panY}px) rotate(${rotate}deg) scale(${scale})`;
+  const zoomed = scale > IMAGE_VIEWER_MIN_SCALE + 0.001;
+  img.classList.toggle("is-zoomed", zoomed);
+  document.getElementById("image-viewer-zoom-level").textContent = `${Math.round(scale * 100)}%`;
+  document.getElementById("image-viewer-zoom-out").disabled = scale <= IMAGE_VIEWER_MIN_SCALE + 0.001;
+  document.getElementById("image-viewer-zoom-in").disabled = scale >= IMAGE_VIEWER_MAX_SCALE - 0.001;
+}
+
+function resetImageViewerTransform() {
+  imageViewerTransform.scale = IMAGE_VIEWER_MIN_SCALE;
+  imageViewerTransform.panX = 0;
+  imageViewerTransform.panY = 0;
+  imageViewerTransform.rotate = 0;
+  applyImageViewerTransform();
+}
+
+// Keeps the point under (clientX, clientY) visually stationary while the
+// scale changes — the same trick photo apps use so zooming with the wheel
+// or a pinch feels anchored to the cursor/fingers instead of always
+// zooming from the image's center. Falls back to the stage's own center
+// when no pointer position is given (toolbar buttons, +/- keys).
+function imageViewerZoomTo(nextScale, clientX, clientY) {
+  const clamped = Math.min(IMAGE_VIEWER_MAX_SCALE, Math.max(IMAGE_VIEWER_MIN_SCALE, nextScale));
+  if (clamped <= IMAGE_VIEWER_MIN_SCALE + 0.001) { resetImageViewerTransform(); return; }
+  const stage = document.getElementById("image-viewer-stage");
+  const rect = stage.getBoundingClientRect();
+  const originX = (clientX ?? (rect.left + rect.width / 2)) - (rect.left + rect.width / 2);
+  const originY = (clientY ?? (rect.top + rect.height / 2)) - (rect.top + rect.height / 2);
+  const oldScale = imageViewerTransform.scale;
+  const offsetX = (originX - imageViewerTransform.panX) / oldScale;
+  const offsetY = (originY - imageViewerTransform.panY) / oldScale;
+  imageViewerTransform.panX = originX - offsetX * clamped;
+  imageViewerTransform.panY = originY - offsetY * clamped;
+  imageViewerTransform.scale = clamped;
+  clampImageViewerPan();
+  applyImageViewerTransform();
+}
+
+// Loosely keeps the (possibly rotated) image from being dragged so far
+// that it disappears off-stage entirely. Deliberately generous rather
+// than pixel-perfect — object-fit:contain means the exact on-screen
+// image size depends on its own aspect ratio, which isn't worth
+// recomputing on every drag frame just to clamp panning.
+function clampImageViewerPan() {
+  const stage = document.getElementById("image-viewer-stage");
+  const rect = stage.getBoundingClientRect();
+  const scale = imageViewerTransform.scale;
+  const maxX = (rect.width * (scale - 1)) / 2 + 40;
+  const maxY = (rect.height * (scale - 1)) / 2 + 40;
+  imageViewerTransform.panX = Math.min(maxX, Math.max(-maxX, imageViewerTransform.panX));
+  imageViewerTransform.panY = Math.min(maxY, Math.max(-maxY, imageViewerTransform.panY));
+}
+
+document.getElementById("image-viewer-zoom-in").addEventListener("click", () => imageViewerZoomTo(imageViewerTransform.scale + IMAGE_VIEWER_STEP));
+document.getElementById("image-viewer-zoom-out").addEventListener("click", () => imageViewerZoomTo(imageViewerTransform.scale - IMAGE_VIEWER_STEP));
+document.getElementById("image-viewer-zoom-reset").addEventListener("click", resetImageViewerTransform);
+document.getElementById("image-viewer-rotate").addEventListener("click", () => {
+  imageViewerTransform.rotate = (imageViewerTransform.rotate + 90) % 360;
+  applyImageViewerTransform();
+});
+
 (() => {
   const stage = document.getElementById("image-viewer-stage");
-  let startX = null;
-  stage.addEventListener("touchstart", (e) => { startX = e.touches[0].clientX; }, { passive: true });
-  stage.addEventListener("touchend", (e) => {
-    if (startX === null) return;
-    const dx = e.changedTouches[0].clientX - startX;
-    startX = null;
-    if (Math.abs(dx) < 40) return; // ignore taps/small jitters
-    imageViewerStep(dx > 0 ? -1 : 1);
+  const img = document.getElementById("image-viewer-img");
+
+  // Mouse wheel: zoom in/out anchored to the cursor position.
+  stage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const step = e.deltaY > 0 ? -IMAGE_VIEWER_WHEEL_STEP : IMAGE_VIEWER_WHEEL_STEP;
+    imageViewerZoomTo(imageViewerTransform.scale + step, e.clientX, e.clientY);
+  }, { passive: false });
+
+  // Double-click: toggle between fit (100%) and a comfortable close-up,
+  // anchored to wherever was clicked.
+  img.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    if (imageViewerTransform.scale > IMAGE_VIEWER_MIN_SCALE + 0.001) resetImageViewerTransform();
+    else imageViewerZoomTo(IMAGE_VIEWER_DBLTAP_SCALE, e.clientX, e.clientY);
   });
+
+  // Mouse drag-to-pan, only meaningful once zoomed in.
+  let mouseDrag = null;
+  img.addEventListener("mousedown", (e) => {
+    if (imageViewerTransform.scale <= IMAGE_VIEWER_MIN_SCALE + 0.001) return;
+    e.preventDefault();
+    mouseDrag = { startX: e.clientX, startY: e.clientY, panX: imageViewerTransform.panX, panY: imageViewerTransform.panY };
+    img.classList.add("is-dragging");
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!mouseDrag) return;
+    imageViewerTransform.panX = mouseDrag.panX + (e.clientX - mouseDrag.startX);
+    imageViewerTransform.panY = mouseDrag.panY + (e.clientY - mouseDrag.startY);
+    clampImageViewerPan();
+    applyImageViewerTransform();
+  });
+  window.addEventListener("mouseup", () => {
+    if (!mouseDrag) return;
+    mouseDrag = null;
+    img.classList.remove("is-dragging");
+  });
+
+  // Touch: single finger swipes to navigate when un-zoomed (unchanged
+  // behavior from before), pans the image when zoomed in; two fingers
+  // pinch-zoom anchored to the midpoint between them; a quick double-tap
+  // toggles zoom, same as double-click above.
+  const touchDistance = (t1, t2) => Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  const touchMidpoint = (t1, t2) => ({ x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 });
+  let touchState = null;
+  let lastTapAt = 0;
+
+  stage.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2) {
+      touchState = {
+        mode: "pinch",
+        startDist: touchDistance(e.touches[0], e.touches[1]),
+        startScale: imageViewerTransform.scale,
+        midpoint: touchMidpoint(e.touches[0], e.touches[1])
+      };
+      img.classList.add("is-pinching");
+      return;
+    }
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const now = Date.now();
+    if (now - lastTapAt < 300) {
+      lastTapAt = 0;
+      touchState = null;
+      if (imageViewerTransform.scale > IMAGE_VIEWER_MIN_SCALE + 0.001) resetImageViewerTransform();
+      else imageViewerZoomTo(IMAGE_VIEWER_DBLTAP_SCALE, t.clientX, t.clientY);
+      return;
+    }
+    lastTapAt = now;
+    touchState = imageViewerTransform.scale > IMAGE_VIEWER_MIN_SCALE + 0.001
+      ? { mode: "pan", startX: t.clientX, startY: t.clientY, panX: imageViewerTransform.panX, panY: imageViewerTransform.panY }
+      : { mode: "swipe", startX: t.clientX };
+  }, { passive: true });
+
+  stage.addEventListener("touchmove", (e) => {
+    if (!touchState) return;
+    if (touchState.mode === "pinch" && e.touches.length === 2) {
+      e.preventDefault();
+      const dist = touchDistance(e.touches[0], e.touches[1]);
+      const nextScale = touchState.startScale * (dist / touchState.startDist);
+      imageViewerZoomTo(nextScale, touchState.midpoint.x, touchState.midpoint.y);
+    } else if (touchState.mode === "pan" && e.touches.length === 1) {
+      e.preventDefault();
+      imageViewerTransform.panX = touchState.panX + (e.touches[0].clientX - touchState.startX);
+      imageViewerTransform.panY = touchState.panY + (e.touches[0].clientY - touchState.startY);
+      clampImageViewerPan();
+      applyImageViewerTransform();
+    }
+    // mode "swipe" needs no live feedback — the navigation decision is
+    // made once, on touchend, exactly like before.
+  }, { passive: false });
+
+  stage.addEventListener("touchend", (e) => {
+    img.classList.remove("is-pinching");
+    if (!touchState) return;
+    if (touchState.mode === "swipe") {
+      const dx = e.changedTouches[0].clientX - touchState.startX;
+      if (Math.abs(dx) >= 40) imageViewerStep(dx > 0 ? -1 : 1); // ignore taps/small jitters
+    }
+    touchState = null;
+  }, { passive: true });
 })();
 
 /* ============================================================
