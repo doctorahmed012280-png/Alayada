@@ -1513,8 +1513,8 @@ async function deleteLocalAttachmentRecord(localId) {
   await idbRequestToPromise(store.delete(localId));
 }
 
-function notifyAttachmentQueueChanged(patientId) {
-  window.dispatchEvent(new CustomEvent("attachments-queue-changed", { detail: { patientId } }));
+function notifyAttachmentQueueChanged(patientId, extra) {
+  window.dispatchEvent(new CustomEvent("attachments-queue-changed", { detail: { patientId, ...extra } }));
 }
 
 // One reusable object URL per locally-stored image, instead of minting a
@@ -1603,8 +1603,14 @@ async function processAttachmentUploadQueue(patientId) {
       await putLocalAttachment(row);
       notifyAttachmentQueueChanged(row.patientId);
       try {
-        await uploadPatientAttachment(row.patientId, row.blob, { skipCompression: true, fileName: row.name, mimeType: row.mimeType });
+        const result = await uploadPatientAttachment(row.patientId, row.blob, { skipCompression: true, fileName: row.name, mimeType: row.mimeType });
         await removeLocalAttachment(row.localId, row.patientId);
+        // TEMP DIAGNOSTIC — confirms exactly which patientId/path the record
+        // actually landed under and its new key, so we can compare that
+        // against the patientId the panel is subscribed to and the record
+        // visible in the Firebase console, instead of just trusting that
+        // "no error thrown" means "shows up in the right list".
+        notifyAttachmentQueueChanged(row.patientId, { lastWrite: { patientId: row.patientId, id: result?.id, path: `patientAttachments/${row.patientId}/${result?.id}` } });
       } catch (err) {
         row.status = "error";
         row.errorMessage = err.message || "تعذّر رفع الملف.";
@@ -1755,7 +1761,17 @@ function wireAttachmentsPanel(idPrefix, patientId) {
 
   // Keeps this panel's badges (pending/uploading/error) live even
   // though IndexedDB itself has no built-in change listener.
-  const onQueueChange = (e) => { if (!e.detail || e.detail.patientId === patientId) refreshLocal(); };
+  const onQueueChange = (e) => {
+    if (!e.detail || e.detail.patientId === patientId) refreshLocal();
+    // TEMP DIAGNOSTIC — shows the panel's own patientId next to the
+    // patientId/path the last successful upload actually wrote to, so a
+    // mismatch (record landing under a different patient than the one
+    // this panel is subscribed to) is visible at a glance instead of
+    // being invisible in the Firebase console alone.
+    if (debugEl2 && e.detail?.lastWrite) {
+      debugEl2.textContent += ` | 📍 هذا البانل مشترك في مريض: ${patientId} — آخر كتابة ناجحة راحت لمريض: ${e.detail.lastWrite.patientId} (id: ${e.detail.lastWrite.id})`;
+    }
+  };
   window.addEventListener("attachments-queue-changed", onQueueChange);
   refreshLocal();
 
