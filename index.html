@@ -1610,7 +1610,7 @@ async function processAttachmentUploadQueue(patientId) {
         // against the patientId the panel is subscribed to and the record
         // visible in the Firebase console, instead of just trusting that
         // "no error thrown" means "shows up in the right list".
-        notifyAttachmentQueueChanged(row.patientId, { lastWrite: { patientId: row.patientId, id: result?.id, path: `patientAttachments/${row.patientId}/${result?.id}` } });
+        notifyAttachmentQueueChanged(row.patientId, { lastWrite: { patientId: row.patientId, id: result?.id, tenantId: me.tenantId, path: t(`patientAttachments/${row.patientId}/${result?.id}`) } });
       } catch (err) {
         row.status = "error";
         row.errorMessage = err.message || "تعذّر رفع الملف.";
@@ -1693,6 +1693,7 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   const list = document.getElementById(`${idPrefix}-list`);
   const debugEl = document.getElementById(`${idPrefix}-debug`); // TEMP DIAGNOSTIC
   const debugEl2 = document.getElementById(`${idPrefix}-debug2`); // TEMP DIAGNOSTIC
+  const panelTenantId = me.tenantId; // TEMP DIAGNOSTIC — snapshot at subscribe-time, to compare against write-time tenantId
   if (!cameraBtn || !fileBtn || !list) return () => {};
 
   cameraBtn.onclick = () => cameraInput.click();
@@ -1769,7 +1770,8 @@ function wireAttachmentsPanel(idPrefix, patientId) {
     // this panel is subscribed to) is visible at a glance instead of
     // being invisible in the Firebase console alone.
     if (debugEl2 && e.detail?.lastWrite) {
-      debugEl2.textContent += ` | 📍 هذا البانل مشترك في مريض: ${patientId} — آخر كتابة ناجحة راحت لمريض: ${e.detail.lastWrite.patientId} (id: ${e.detail.lastWrite.id})`;
+      const panelReadPath = t("patientAttachments/" + patientId);
+      debugEl2.textContent += ` | 📍 tenantId البانل (وقت الاشتراك): ${panelTenantId} — tenantId الكتابة: ${e.detail.lastWrite.tenantId} — المسار الكامل اللي اتكتب فيه: ${e.detail.lastWrite.path} — المسار اللي البانل بيقرا منه: ${panelReadPath}`;
     }
   };
   window.addEventListener("attachments-queue-changed", onQueueChange);
