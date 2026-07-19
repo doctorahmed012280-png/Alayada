@@ -1634,6 +1634,8 @@ function attachmentsPanelHTML(idPrefix) {
       <input type="file" id="${idPrefix}-file-input" accept="image/*,application/pdf" multiple style="display:none;">
       <div class="error-msg" id="${idPrefix}-msg"></div>
       <div id="${idPrefix}-progress" style="display:none;color:var(--ink-soft);font-size:.85rem;margin-bottom:10px;">⏳ جارٍ رفع الملف...</div>
+      <!-- TEMP DIAGNOSTIC — remove this line once the display bug is found -->
+      <div id="${idPrefix}-debug" style="font-size:.72rem;color:#999;margin-bottom:8px;"></div>
       <div class="attachments-grid" id="${idPrefix}-list"><div class="empty-state">لا توجد ملفات مرفوعة بعد</div></div>
     </div>`;
 }
@@ -1673,6 +1675,7 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   const msg = document.getElementById(`${idPrefix}-msg`);
   const progress = document.getElementById(`${idPrefix}-progress`);
   const list = document.getElementById(`${idPrefix}-list`);
+  const debugEl = document.getElementById(`${idPrefix}-debug`); // TEMP DIAGNOSTIC
   if (!cameraBtn || !fileBtn || !list) return () => {};
 
   cameraBtn.onclick = () => cameraInput.click();
@@ -1680,7 +1683,13 @@ function wireAttachmentsPanel(idPrefix, patientId) {
 
   let remoteRows = [];
   let localRows = [];
-  const rerender = () => renderAttachmentsList(list, patientId, [...localRows.map(attachmentRowFromLocal), ...remoteRows]);
+  const rerender = () => {
+    // TEMP DIAGNOSTIC — shows raw counts on-screen so we can tell whether
+    // missing attachments are a data problem (Firebase/local count wrong)
+    // or a rendering problem (counts correct, card just doesn't show).
+    if (debugEl) debugEl.textContent = `🔍 من Firebase: ${remoteRows.length} · محلي (لسه بيترفع/معلّق): ${localRows.length}`;
+    renderAttachmentsList(list, patientId, [...localRows.map(attachmentRowFromLocal), ...remoteRows]);
+  };
   const refreshLocal = async () => {
     try { localRows = await getLocalAttachmentsForPatient(patientId); }
     catch (err) { console.error("تعذّرت قراءة الملفات المحلية", err); }
