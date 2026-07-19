@@ -1424,7 +1424,14 @@ function subscribePatientAttachments(patientId, callback) {
   // directly fixes every subscribe*() in the app at once.
   return onValue(listRef, (snap) => {
     const rows = [];
-    snap.forEach((child) => rows.push({ id: child.key, ...child.val() }));
+    // BUG FIX: Firebase's DataSnapshot.forEach stops iterating the instant its
+    // callback returns a truthy value. `rows.push(...)` returns the array's
+    // new length (1, 2, 3...) — always truthy — so with the old one-line
+    // arrow (`(child) => rows.push(...)`), forEach silently stopped after the
+    // FIRST child every single time, no matter how many attachments existed.
+    // That's why the list always froze at exactly one (the oldest) record.
+    // Wrapping the body in braces makes the callback return undefined instead.
+    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
     rows.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
     callback(rows);
   });
