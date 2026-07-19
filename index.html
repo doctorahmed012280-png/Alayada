@@ -1361,7 +1361,15 @@ async function uploadToCloudinary(file, filename) {
   form.append("upload_preset", CLOUDINARY_CONFIG.uploadPreset);
   const resourceType = file.type === "application/pdf" ? "raw" : "image";
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/${resourceType}/upload`, { method: "POST", body: form });
-  if (!res.ok) throw new Error("تعذّر رفع الملف — تأكدي من إعدادات Cloudinary أو حاولي مرة أخرى.");
+  if (!res.ok) {
+    // TEMP DIAGNOSTIC — surface Cloudinary's actual error text (e.g. "Upload
+    // preset not found", "Invalid cloud_name", format/plan restrictions...)
+    // instead of one generic message, so the real cause shows up on-screen
+    // in the error badge instead of only in devtools.
+    let detail = "";
+    try { detail = (await res.json())?.error?.message || ""; } catch { try { detail = await res.text(); } catch {} }
+    throw new Error(`تعذّر رفع الملف (HTTP ${res.status})${detail ? " — " + detail : ""}`);
+  }
   const data = await res.json();
   return { url: data.secure_url, publicId: data.public_id };
 }
@@ -1765,8 +1773,13 @@ function renderAttachmentsList(list, patientId, rows) {
     const card = document.createElement("div");
     card.className = "attachment-card" + (isLocal ? ` is-local status-${a.status}` : "");
     const statusBadge = !isLocal ? "" : (a.status === "error"
-      ? `<div class="attachment-status-badge attachment-status-error">⚠️ فشل الرفع</div>`
+      ? `<div class="attachment-status-badge attachment-status-error" title="${a.errorMessage || ""}">⚠️ فشل الرفع</div>`
       : `<div class="attachment-status-badge">⏳ ${a.status === "uploading" ? "جارٍ الرفع…" : "بانتظار الاتصال"}</div>`);
+    // TEMP DIAGNOSTIC — the badge above only fits "⚠️ فشل الرفع"; the actual
+    // reason (Cloudinary's real error text) is shown in full underneath so
+    // it's visible directly on the card, not just in a hover title/devtools.
+    const errorDetail = (isLocal && a.status === "error" && a.errorMessage)
+      ? `<div class="attachment-sub" style="color:#b91c1c;">${a.errorMessage}</div>` : "";
     const thumbInner = a.kind === "pdf"
       ? `<div class="attachment-thumb-pdf">📄</div>`
       : `<img class="attachment-thumb" src="${a.url}" alt="${a.name}" loading="lazy">`;
@@ -1778,6 +1791,7 @@ function renderAttachmentsList(list, patientId, rows) {
       <div class="attachment-meta">
         <div class="attachment-name" title="${a.name}">${a.name}</div>
         <div class="attachment-sub">${a.uploadedByName || "—"} · ${formatArabicDate(a.uploadedAt)}</div>
+        ${errorDetail}
         ${isLocal && a.status === "error" ? `<button type="button" class="btn btn-ghost btn-sm attachment-retry-btn">إعادة المحاولة</button>` : ""}
       </div>
       <button type="button" class="attachment-delete" aria-label="حذف الملف">✕</button>`;
