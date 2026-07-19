@@ -62,6 +62,34 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .topbar-search-group .search-dropdown { position:absolute; top:calc(100% + 4px); inset-inline:0; border:1px solid var(--line); border-radius:var(--radius-sm); background:#fff; box-shadow:var(--shadow); z-index:60; overflow:hidden; }
 .topbar-search-group .btn { flex-shrink:0; white-space:nowrap; }
 
+/* ---- Main search bar (desktop) ----
+   On wide screens the sidebar stays a normal, full-height nav column
+   (brand mark + user card always visible) — the search box for
+   search-led pages moves here instead, at the very top of the page
+   content, right under the page title. reparentSearchGroup() in the
+   script below moves the actual box (#topbar-search-sec-patients or
+   #topbar-search-doc-chart) in and out of this container depending
+   on viewport width; on narrow/mobile screens this stays empty and
+   hidden and the same box lives inside .sidebar-search-slot instead. */
+.main-search-bar { display:none; }
+.main-search-bar.is-active {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow); padding:16px 20px; margin-bottom:24px;
+}
+.main-search-bar .search-field-wrap { flex:1; min-width:220px; position:relative; margin-bottom:0; }
+.main-search-bar .search-field-wrap input {
+  width:100%; padding:12px 16px; font-size:1rem; border-radius:var(--radius-sm);
+  border:1px solid var(--line); background:var(--canvas); color:var(--ink);
+}
+.main-search-bar .search-field-wrap input:focus { border-color:var(--primary); background:#fff; }
+.main-search-bar .search-dropdown {
+  position:absolute; top:calc(100% + 6px); inset-inline:0; border:1px solid var(--line);
+  border-radius:var(--radius-sm); background:#fff; box-shadow:var(--shadow); z-index:60; overflow:hidden;
+}
+.main-search-bar .btn { flex-shrink:0; white-space:nowrap; }
+@media (max-width:760px) { .main-search-bar.is-active { display:none; } }
+
 .main { padding:32px 40px; overflow-y:auto; }
 .main-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
 .main-header .date { color:var(--ink-soft); font-size:.95rem; }
@@ -424,9 +452,13 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
     <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle-btn" aria-label="فتح القائمة">☰</button>
     <div class="brand" id="sidebar-brand">الـعـيـادة<span>.</span></div>
 
-    <!-- Swapped in place of the brand/user name on search-led pages
-         (see .sidebar-search-slot in <style>) — holds one search box
-         per page, only one shown at a time via showSection(). -->
+    <!-- Holds one search box per page (only one shown at a time).
+         On mobile this is swapped in place of the brand/user name,
+         right inside the compact top bar (see .sidebar-search-slot
+         in <style>). On desktop the sidebar stays a normal nav
+         column and the active box gets moved out of here into
+         #main-search-bar, at the top of the page content instead —
+         see reparentSearchGroup() further down. -->
     <div class="sidebar-search-slot" id="sidebar-search-slot">
       <div class="topbar-search-group" id="topbar-search-sec-patients">
         <div class="field search-field-wrap">
@@ -458,6 +490,11 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
       <h1 id="view-title">—</h1>
       <div class="date" id="today-date"></div>
     </div>
+    <!-- Desktop home for the current page's search box — see
+         reparentSearchGroup() further down; stays empty/hidden on
+         mobile, where the same box lives in the sidebar instead
+         (#sidebar-search-slot). -->
+    <div class="main-search-bar" id="main-search-bar"></div>
     <!-- ===== SECRETARY: queue ===== -->
     <section id="sec-view-queue" style="display:none;">
       <div class="grid-2">
@@ -506,9 +543,10 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
     </section>
 
     <!-- ===== SECRETARY: patients ===== -->
-    <!-- Search box + "add new case" button for this page live in the
-         sidebar now (#topbar-search-sec-patients) instead of a panel
-         here, so this section starts right at the results. -->
+    <!-- Search box + "add new case" button for this page (#topbar-search-sec-patients)
+         live at the top of the page on desktop (#main-search-bar) and inside the
+         sidebar's compact top bar on mobile — never as a panel here, so this
+         section starts right at the results. -->
     <section id="sec-view-patients" style="display:none;">
       <div class="panel">
         <h3>نتيجة البحث</h3>
@@ -547,9 +585,10 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
     </section>
 
     <!-- ===== DOCTOR: chart ===== -->
-    <!-- Search box + "add new case" button for this page live in the
-         sidebar now (#topbar-search-doc-chart) instead of a panel
-         here, so this section starts right at the case file. -->
+    <!-- Search box + "add new case" button for this page (#topbar-search-doc-chart)
+         live at the top of the page on desktop (#main-search-bar) and inside the
+         sidebar's compact top bar on mobile — never as a panel here, so this
+         section starts right at the case file. -->
     <section id="doc-view-chart" style="display:none;">
       <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري حالة من الدور، أو ابحثي عنها بالأعلى لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
@@ -2452,24 +2491,55 @@ function showApp() {
    and the mobile bottom bar, so both stay in sync automatically.
    ============================================================ */
 const ALL_SECTIONS = ["sec-view-queue", "sec-view-appointments", "sec-view-patients", "sec-view-billing", "doc-view-queue", "doc-view-chart", "doc-view-attachments", "doc-view-finance", "view-settings"];
-// These pages lead with a search box instead of a page title, so the
-// title/date row is hidden and — instead of a bar inside the page —
-// the search box + "add new case" button take over the sidebar/topbar
-// (replacing the brand mark and the signed-in user's name) via
-// TOPBAR_SEARCH_GROUPS below. That keeps the page itself free of a
-// dedicated search row, leaving more room for its actual content.
+// These pages lead with a search box. Where that box actually lives
+// depends on screen size (see reparentSearchGroup() below):
+//  - Desktop: at the top of the page content, in #main-search-bar,
+//    right under the (still visible) page title — plenty of room there.
+//  - Mobile: inside the sidebar's compact top bar, replacing the brand
+//    mark and the signed-in user's name (see .sidebar-search-slot in
+//    <style>), since there's no separate room for a search row there;
+//    the page title is hidden in this case to save vertical space.
 const SECTIONS_WITHOUT_HEADER = ["doc-view-chart", "sec-view-patients"];
 const TOPBAR_SEARCH_GROUPS = { "doc-view-chart": "topbar-search-doc-chart", "sec-view-patients": "topbar-search-sec-patients" };
+
+const DESKTOP_MEDIA_QUERY = window.matchMedia("(min-width:761px)");
+function isDesktopViewport() { return DESKTOP_MEDIA_QUERY.matches; }
+
+let currentSectionId = null; // tracked so reparentSearchGroup() can react to a viewport resize without needing showSection() to run again
+
+/* Moves the current page's search box (if it has one) to wherever it
+   belongs for the current viewport width, and shows/hides the page
+   title accordingly. Runs on every section switch and again whenever
+   the viewport crosses the desktop/mobile breakpoint (e.g. resizing a
+   desktop window, rotating a tablet), so the same input — with
+   whatever the user already typed into it — just moves across rather
+   than getting reset. */
+function reparentSearchGroup() {
+  const activeGroupId = TOPBAR_SEARCH_GROUPS[currentSectionId];
+  const desktop = isDesktopViewport();
+  const sidebarSlot = document.getElementById("sidebar-search-slot");
+  const mainBar = document.getElementById("main-search-bar");
+
+  document.querySelectorAll(".topbar-search-group").forEach(g => {
+    const isActive = g.id === activeGroupId;
+    g.style.display = isActive ? "flex" : "none";
+    if (isActive) (desktop ? mainBar : sidebarSlot).appendChild(g);
+  });
+
+  document.body.classList.toggle("topbar-search-mode", !!activeGroupId && !desktop);
+  mainBar.classList.toggle("is-active", !!activeGroupId && desktop);
+  document.getElementById("main-header").style.display =
+    (SECTIONS_WITHOUT_HEADER.includes(currentSectionId) && !desktop) ? "none" : "";
+}
+DESKTOP_MEDIA_QUERY.addEventListener("change", reparentSearchGroup);
 
 function showSection(id, title) {
   ALL_SECTIONS.forEach(s => document.getElementById(s).style.display = s === id ? "" : "none");
   document.getElementById("view-title").textContent = title;
-  document.getElementById("main-header").style.display = SECTIONS_WITHOUT_HEADER.includes(id) ? "none" : "";
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.target === id));
 
-  const activeGroupId = TOPBAR_SEARCH_GROUPS[id];
-  document.body.classList.toggle("topbar-search-mode", !!activeGroupId);
-  document.querySelectorAll(".topbar-search-group").forEach(g => g.style.display = g.id === activeGroupId ? "flex" : "none");
+  currentSectionId = id;
+  reparentSearchGroup();
   updateStickyOffsets();
   updateExamInvoiceFabVisibility();
 }
