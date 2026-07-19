@@ -1362,10 +1362,10 @@ async function uploadToCloudinary(file, filename) {
   const resourceType = file.type === "application/pdf" ? "raw" : "image";
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CONFIG.cloudName}/${resourceType}/upload`, { method: "POST", body: form });
   if (!res.ok) {
-    // TEMP DIAGNOSTIC — surface Cloudinary's actual error text (e.g. "Upload
-    // preset not found", "Invalid cloud_name", format/plan restrictions...)
-    // instead of one generic message, so the real cause shows up on-screen
-    // in the error badge instead of only in devtools.
+    // Surfaces Cloudinary's actual error text (e.g. "Upload preset not
+    // found", "Invalid cloud_name", format/plan restrictions...) instead of
+    // one generic message, so the real cause shows up on-screen in the
+    // error badge instead of only in devtools.
     let detail = "";
     try { detail = (await res.json())?.error?.message || ""; } catch { try { detail = await res.text(); } catch {} }
     throw new Error(`تعذّر رفع الملف (HTTP ${res.status})${detail ? " — " + detail : ""}`);
@@ -1520,8 +1520,8 @@ async function deleteLocalAttachmentRecord(localId) {
   await idbRequestToPromise(store.delete(localId));
 }
 
-function notifyAttachmentQueueChanged(patientId, extra) {
-  window.dispatchEvent(new CustomEvent("attachments-queue-changed", { detail: { patientId, ...extra } }));
+function notifyAttachmentQueueChanged(patientId) {
+  window.dispatchEvent(new CustomEvent("attachments-queue-changed", { detail: { patientId } }));
 }
 
 // One reusable object URL per locally-stored image, instead of minting a
@@ -1610,14 +1610,8 @@ async function processAttachmentUploadQueue(patientId) {
       await putLocalAttachment(row);
       notifyAttachmentQueueChanged(row.patientId);
       try {
-        const result = await uploadPatientAttachment(row.patientId, row.blob, { skipCompression: true, fileName: row.name, mimeType: row.mimeType });
+        await uploadPatientAttachment(row.patientId, row.blob, { skipCompression: true, fileName: row.name, mimeType: row.mimeType });
         await removeLocalAttachment(row.localId, row.patientId);
-        // TEMP DIAGNOSTIC — confirms exactly which patientId/path the record
-        // actually landed under and its new key, so we can compare that
-        // against the patientId the panel is subscribed to and the record
-        // visible in the Firebase console, instead of just trusting that
-        // "no error thrown" means "shows up in the right list".
-        notifyAttachmentQueueChanged(row.patientId, { lastWrite: { patientId: row.patientId, id: result?.id, tenantId: me.tenantId, path: t(`patientAttachments/${row.patientId}/${result?.id}`) } });
       } catch (err) {
         row.status = "error";
         row.errorMessage = err.message || "تعذّر رفع الملف.";
@@ -1655,10 +1649,6 @@ function attachmentsPanelHTML(idPrefix) {
       <input type="file" id="${idPrefix}-file-input" accept="image/*,application/pdf" multiple style="display:none;">
       <div class="error-msg" id="${idPrefix}-msg"></div>
       <div id="${idPrefix}-progress" style="display:none;color:var(--ink-soft);font-size:.85rem;margin-bottom:10px;">⏳ جارٍ رفع الملف...</div>
-      <!-- TEMP DIAGNOSTIC — remove this line once the display bug is found -->
-      <div id="${idPrefix}-debug" style="font-size:.72rem;color:#999;margin-bottom:4px;"></div>
-      <!-- TEMP DIAGNOSTIC — remove this line once the display bug is found -->
-      <div id="${idPrefix}-debug2" style="font-size:.72rem;color:#b45309;margin-bottom:8px;word-break:break-word;"></div>
       <div class="attachments-grid" id="${idPrefix}-list"><div class="empty-state">لا توجد ملفات مرفوعة بعد</div></div>
     </div>`;
 }
@@ -1698,9 +1688,6 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   const msg = document.getElementById(`${idPrefix}-msg`);
   const progress = document.getElementById(`${idPrefix}-progress`);
   const list = document.getElementById(`${idPrefix}-list`);
-  const debugEl = document.getElementById(`${idPrefix}-debug`); // TEMP DIAGNOSTIC
-  const debugEl2 = document.getElementById(`${idPrefix}-debug2`); // TEMP DIAGNOSTIC
-  const panelTenantId = me.tenantId; // TEMP DIAGNOSTIC — snapshot at subscribe-time, to compare against write-time tenantId
   if (!cameraBtn || !fileBtn || !list) return () => {};
 
   cameraBtn.onclick = () => cameraInput.click();
@@ -1709,10 +1696,6 @@ function wireAttachmentsPanel(idPrefix, patientId) {
   let remoteRows = [];
   let localRows = [];
   const rerender = () => {
-    // TEMP DIAGNOSTIC — shows raw counts on-screen so we can tell whether
-    // missing attachments are a data problem (Firebase/local count wrong)
-    // or a rendering problem (counts correct, card just doesn't show).
-    if (debugEl) debugEl.textContent = `🔍 من Firebase: ${remoteRows.length} · محلي (لسه بيترفع/معلّق): ${localRows.length}`;
     renderAttachmentsList(list, patientId, [...localRows.map(attachmentRowFromLocal), ...remoteRows]);
   };
   const refreshLocal = async () => {
@@ -1727,13 +1710,6 @@ function wireAttachmentsPanel(idPrefix, patientId) {
     msg.textContent = "";
     progress.style.display = "";
     progress.textContent = "⏳ جارٍ الحفظ على الجهاز...";
-    // TEMP DIAGNOSTIC — shows exactly what the picker handed to the app,
-    // before any processing, so we can tell if the input itself only
-    // ever gives us one file when two were picked.
-    if (debugEl2) {
-      debugEl2.textContent = `🔍 استلمنا ${files.length} ملف من الاختيار: ` +
-        files.map(f => `"${f.name || "بدون اسم"}" (${Math.round((f.size || 0) / 1024)}ك، ${f.type || "نوع غير معروف"})`).join(" | ");
-    }
     // IMPORTANT: each file gets its own try/catch. Multi-selecting several
     // photos at once (gallery/PDF picker) previously ran all of them inside
     // ONE try/catch wrapping the whole loop — the instant any single file
@@ -1744,20 +1720,14 @@ function wireAttachmentsPanel(idPrefix, patientId) {
     // file means one bad file only skips itself; everything else in the
     // batch still gets saved and appears in the grid.
     const failures = [];
-    const successes = []; // TEMP DIAGNOSTIC
     for (const file of files) {
       try {
         await saveAttachmentLocally(patientId, file);
-        successes.push(file.name || "ملف"); // TEMP DIAGNOSTIC
       } catch (err) {
         failures.push(`${file.name || "ملف"}: ${err.message || "تعذّر حفظ الملف."}`);
       }
     }
     progress.style.display = "none";
-    // TEMP DIAGNOSTIC — appends the outcome of every file in this selection
-    if (debugEl2) {
-      debugEl2.textContent += ` ← ✅ اتحفظ: ${successes.length ? successes.join("، ") : "لا شيء"} — ❌ فشل: ${failures.length ? failures.join("، ") : "لا شيء"}`;
-    }
     if (failures.length) {
       msg.textContent = failures.length === files.length
         ? (failures[0] || "تعذّر حفظ الملفات، حاولي مرة أخرى.")
@@ -1769,18 +1739,7 @@ function wireAttachmentsPanel(idPrefix, patientId) {
 
   // Keeps this panel's badges (pending/uploading/error) live even
   // though IndexedDB itself has no built-in change listener.
-  const onQueueChange = (e) => {
-    if (!e.detail || e.detail.patientId === patientId) refreshLocal();
-    // TEMP DIAGNOSTIC — shows the panel's own patientId next to the
-    // patientId/path the last successful upload actually wrote to, so a
-    // mismatch (record landing under a different patient than the one
-    // this panel is subscribed to) is visible at a glance instead of
-    // being invisible in the Firebase console alone.
-    if (debugEl2 && e.detail?.lastWrite) {
-      const panelReadPath = t("patientAttachments/" + patientId);
-      debugEl2.textContent += ` | 📍 tenantId البانل (وقت الاشتراك): ${panelTenantId} — tenantId الكتابة: ${e.detail.lastWrite.tenantId} — المسار الكامل اللي اتكتب فيه: ${e.detail.lastWrite.path} — المسار اللي البانل بيقرا منه: ${panelReadPath}`;
-    }
-  };
+  const onQueueChange = (e) => { if (!e.detail || e.detail.patientId === patientId) refreshLocal(); };
   window.addEventListener("attachments-queue-changed", onQueueChange);
   refreshLocal();
 
@@ -1800,9 +1759,9 @@ function renderAttachmentsList(list, patientId, rows) {
     const statusBadge = !isLocal ? "" : (a.status === "error"
       ? `<div class="attachment-status-badge attachment-status-error" title="${a.errorMessage || ""}">⚠️ فشل الرفع</div>`
       : `<div class="attachment-status-badge">⏳ ${a.status === "uploading" ? "جارٍ الرفع…" : "بانتظار الاتصال"}</div>`);
-    // TEMP DIAGNOSTIC — the badge above only fits "⚠️ فشل الرفع"; the actual
-    // reason (Cloudinary's real error text) is shown in full underneath so
-    // it's visible directly on the card, not just in a hover title/devtools.
+    // The badge above only fits "⚠️ فشل الرفع"; the actual reason (the real
+    // upload error text) is shown in full underneath so it's visible
+    // directly on the card, not just in a hover title/devtools.
     const errorDetail = (isLocal && a.status === "error" && a.errorMessage)
       ? `<div class="attachment-sub" style="color:#b91c1c;">${a.errorMessage}</div>` : "";
     const thumbInner = a.kind === "pdf"
