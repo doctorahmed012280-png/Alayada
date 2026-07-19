@@ -255,6 +255,11 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .attachment-sub { font-size:.68rem; color:var(--ink-soft); margin-top:2px; }
 .attachment-delete { position:absolute; top:5px; left:5px; width:22px; height:22px; border-radius:50%; border:none; background:rgba(31,42,36,.6); color:#fff; cursor:pointer; font-size:.72rem; line-height:1; display:flex; align-items:center; justify-content:center; z-index:2; }
 .attachment-delete:hover { background:var(--st-cancelled); }
+/* Image thumbnails open the in-app viewer (below) instead of a plain
+   link, so they're wrapped in a <button> that's reset to look and
+   behave exactly like the old clickable thumbnail did. */
+.attachment-thumb-btn { display:block; width:100%; padding:0; margin:0; border:none; background:none; cursor:pointer; text-align:inherit; font:inherit; color:inherit; }
+.attachment-thumb-btn:hover .attachment-thumb { filter:brightness(.92); }
 @media (max-width: 480px) {
   .attachment-card { flex:0 0 calc(50% - 6px); max-width:calc(50% - 6px); }
 }
@@ -335,6 +340,36 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .modal-box-header h3 { margin:0; }
 .modal-close-btn { flex-shrink:0; background:none; border:none; font-size:1.2rem; line-height:1; color:var(--ink-soft); cursor:pointer; padding:6px 10px; border-radius:var(--radius-sm); }
 .modal-close-btn:hover { background:#F0EBDD; color:var(--ink); }
+
+/* ---------------- Attachment image viewer (full-screen lightbox) ----------------
+   Lets staff page through every photo attached to a patient (prescriptions,
+   lab results...) without leaving the app and opening a new browser tab per
+   image. Reuses the generic .modal-overlay plumbing (open/close, Escape,
+   click-outside-to-close) already wired for every other modal — see
+   openModal()/closeModal() and the .modal-overlay listeners in the script. */
+.image-viewer-overlay { z-index:120; background:rgba(15,18,16,.92); flex-direction:column; gap:14px; }
+.image-viewer-topbar { width:100%; max-width:960px; display:flex; align-items:center; justify-content:space-between; gap:12px; color:#F5F1E8; }
+.image-viewer-counter { font-family:'IBM Plex Mono',monospace; font-size:.85rem; color:#E9E4D6; background:rgba(245,241,232,.12); padding:5px 12px; border-radius:999px; }
+.image-viewer-overlay .modal-close-btn { color:#F5F1E8; background:rgba(245,241,232,.12); }
+.image-viewer-overlay .modal-close-btn:hover { background:rgba(245,241,232,.22); color:#fff; }
+.image-viewer-stage { position:relative; width:100%; max-width:960px; flex:1; min-height:0; display:flex; align-items:center; justify-content:center; touch-action:pan-y; }
+.image-viewer-img { max-width:100%; max-height:78vh; object-fit:contain; border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.5); background:#111; opacity:0; transition:opacity .18s ease; }
+.image-viewer-img.is-loaded { opacity:1; }
+.image-viewer-nav { position:absolute; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:50%; border:none; background:rgba(245,241,232,.14); color:#fff; font-size:1.5rem; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s ease, transform .15s ease; z-index:2; }
+.image-viewer-nav:hover { background:rgba(245,241,232,.28); }
+.image-viewer-nav:active { transform:translateY(-50%) scale(.94); }
+/* Physical (not RTL-logical) left/right placement: on this RTL page, "next"
+   reads visually leftward and "previous" reads visually rightward — see the
+   matching keyboard/swipe mapping in imageViewerStep() usage in the script. */
+.image-viewer-prev { right:8px; }
+.image-viewer-next { left:8px; }
+.image-viewer-nav[hidden] { display:none; }
+.image-viewer-name { max-width:960px; width:100%; text-align:center; color:#C9C2AD; font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@media (max-width:760px) {
+  .image-viewer-overlay { padding:14px; gap:10px; }
+  .image-viewer-nav { width:38px; height:38px; font-size:1.25rem; }
+  .image-viewer-img { max-height:68vh; }
+}
 </style>
 </head>
 <body>
@@ -783,6 +818,24 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
         <button class="btn btn-accent" id="np-create-btn">حفظ الحالة</button>
         <div class="error-msg" id="np-save-msg"></div>
       </div>
+    </div>
+
+    <!-- ===== Attachment image viewer — full-screen lightbox with prev/next
+         navigation, opened from any patient-attachments grid (secretary's
+         patient page or the doctor's case file) via openAttachmentImageViewer()
+         in the script below. Reuses the generic modal-overlay open/close
+         plumbing; only the paging behavior is specific to this modal. ===== -->
+    <div class="modal-overlay image-viewer-overlay" id="modal-image-viewer" role="dialog" aria-modal="true" aria-label="عرض الصورة">
+      <div class="image-viewer-topbar">
+        <span class="image-viewer-counter" id="image-viewer-counter"></span>
+        <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+      </div>
+      <div class="image-viewer-stage" id="image-viewer-stage">
+        <button type="button" class="image-viewer-nav image-viewer-prev" id="image-viewer-prev" aria-label="الصورة السابقة">›</button>
+        <img class="image-viewer-img" id="image-viewer-img" src="" alt="">
+        <button type="button" class="image-viewer-nav image-viewer-next" id="image-viewer-next" aria-label="الصورة التالية">‹</button>
+      </div>
+      <div class="image-viewer-name" id="image-viewer-name"></div>
     </div>
 
   </main>
@@ -1752,6 +1805,11 @@ function wireAttachmentsPanel(idPrefix, patientId) {
 function renderAttachmentsList(list, patientId, rows) {
   if (!rows.length) { list.innerHTML = `<div class="empty-state">لا توجد ملفات مرفوعة بعد</div>`; return; }
   list.innerHTML = "";
+  // Images (not PDFs) with a usable url — whether already synced to the
+  // cloud or still a locally-queued preview — are navigable together in
+  // the full-screen viewer below, so opening one no longer means closing
+  // it and reopening the next one from the grid; see openAttachmentImageViewer().
+  const imageRows = rows.filter(r => r.kind !== "pdf" && r.url);
   rows.forEach(a => {
     const isLocal = a.source === "local";
     const card = document.createElement("div");
@@ -1768,8 +1826,19 @@ function renderAttachmentsList(list, patientId, rows) {
       ? `<div class="attachment-thumb-pdf">📄</div>`
       : `<img class="attachment-thumb" src="${a.url}" alt="${a.name}" loading="lazy">`;
     const thumbWrap = `<div class="attachment-thumb-wrap">${thumbInner}${statusBadge}</div>`;
-    // Not-yet-synced files have no cloud URL to open in a new tab.
-    const clickableThumb = isLocal ? thumbWrap : `<a href="${a.url}" target="_blank" rel="noopener noreferrer">${thumbWrap}</a>`;
+    // Images open the in-app viewer so every photo in this list can be
+    // paged through without leaving the app. PDFs keep opening in a new
+    // tab (the browser's own PDF viewer already handles those well).
+    // Not-yet-synced files with no url at all stay non-clickable, exactly
+    // as before.
+    let clickableThumb;
+    if (a.kind !== "pdf" && a.url) {
+      clickableThumb = `<button type="button" class="attachment-thumb-btn" aria-label="عرض الصورة">${thumbWrap}</button>`;
+    } else if (!isLocal) {
+      clickableThumb = `<a href="${a.url}" target="_blank" rel="noopener noreferrer">${thumbWrap}</a>`;
+    } else {
+      clickableThumb = thumbWrap;
+    }
     card.innerHTML = `
       ${clickableThumb}
       <div class="attachment-meta">
@@ -1779,6 +1848,10 @@ function renderAttachmentsList(list, patientId, rows) {
         ${isLocal && a.status === "error" ? `<button type="button" class="btn btn-ghost btn-sm attachment-retry-btn">إعادة المحاولة</button>` : ""}
       </div>
       <button type="button" class="attachment-delete" aria-label="حذف الملف">✕</button>`;
+    const thumbBtn = card.querySelector(".attachment-thumb-btn");
+    if (thumbBtn) {
+      thumbBtn.onclick = () => openAttachmentImageViewer(imageRows, imageRows.findIndex(r => r.id === a.id));
+    }
     card.querySelector(".attachment-delete").onclick = async () => {
       if (!confirm("حذف هذا الملف نهائيًا؟")) return;
       if (isLocal) await removeLocalAttachment(a.id, patientId);
@@ -1789,6 +1862,80 @@ function renderAttachmentsList(list, patientId, rows) {
     list.appendChild(card);
   });
 }
+
+/* ============================================================
+   ATTACHMENT IMAGE VIEWER (full-screen lightbox with prev/next)
+   Lets staff page through every photo attached to a patient — camera
+   captures, gallery picks, lab results — without closing a tab and
+   reopening the next image from the grid every single time. Shares
+   the app's generic modal-overlay plumbing (openModal/closeModal,
+   Escape-to-close, click-outside-to-close, wired once for every
+   ".modal-overlay" in the DOM); only the paging/keyboard/swipe
+   behavior below is specific to this viewer.
+   ============================================================ */
+let imageViewerItems = [];
+let imageViewerIndex = 0;
+
+function openAttachmentImageViewer(items, startIndex) {
+  if (!items.length) return;
+  imageViewerItems = items;
+  imageViewerIndex = startIndex > -1 ? startIndex : 0;
+  renderImageViewerFrame();
+  openModal("modal-image-viewer");
+}
+
+function renderImageViewerFrame() {
+  const total = imageViewerItems.length;
+  if (!total) { closeModal("modal-image-viewer"); return; }
+  if (imageViewerIndex >= total) imageViewerIndex = 0;
+  if (imageViewerIndex < 0) imageViewerIndex = total - 1;
+  const item = imageViewerItems[imageViewerIndex];
+  const img = document.getElementById("image-viewer-img");
+  img.classList.remove("is-loaded");
+  img.onload = () => img.classList.add("is-loaded");
+  img.src = item.url;
+  img.alt = item.name || "";
+  document.getElementById("image-viewer-name").textContent = item.name || "";
+  document.getElementById("image-viewer-counter").textContent = total > 1 ? `${imageViewerIndex + 1} / ${total}` : "";
+  const multi = total > 1;
+  document.getElementById("image-viewer-prev").hidden = !multi;
+  document.getElementById("image-viewer-next").hidden = !multi;
+}
+
+function imageViewerStep(delta) {
+  if (imageViewerItems.length < 2) return;
+  imageViewerIndex = (imageViewerIndex + delta + imageViewerItems.length) % imageViewerItems.length;
+  renderImageViewerFrame();
+}
+
+document.getElementById("image-viewer-prev").addEventListener("click", () => imageViewerStep(-1));
+document.getElementById("image-viewer-next").addEventListener("click", () => imageViewerStep(1));
+
+// Keyboard navigation, mapped to the buttons' PHYSICAL screen position
+// (not RTL reading order) so the arrow keys always match what's visually
+// on-screen: ArrowLeft activates the left-side ("next") button, ArrowRight
+// the right-side ("previous") one — see .image-viewer-prev/.image-viewer-next
+// placement in the stylesheet.
+document.addEventListener("keydown", (e) => {
+  if (document.getElementById("modal-image-viewer").style.display !== "flex") return;
+  if (e.key === "ArrowLeft") imageViewerStep(1);
+  else if (e.key === "ArrowRight") imageViewerStep(-1);
+});
+
+// Touch swipe support for mobile — same physical-direction mapping as the
+// keyboard handler above.
+(() => {
+  const stage = document.getElementById("image-viewer-stage");
+  let startX = null;
+  stage.addEventListener("touchstart", (e) => { startX = e.touches[0].clientX; }, { passive: true });
+  stage.addEventListener("touchend", (e) => {
+    if (startX === null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    startX = null;
+    if (Math.abs(dx) < 40) return; // ignore taps/small jitters
+    imageViewerStep(dx > 0 ? -1 : 1);
+  });
+})();
 
 /* ============================================================
    MEDICAL ABBREVIATIONS DICTIONARY (doctor-managed, per clinic)
