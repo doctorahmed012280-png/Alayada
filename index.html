@@ -416,6 +416,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 </style>
 </head>
 <body>
+<datalist id="cf-label-datalist"></datalist>
 
 <!-- ===================== LOGIN SCREEN ===================== -->
 <div class="login-wrap" id="screen-login">
@@ -1083,17 +1084,92 @@ function todayKey() {
    visits...). Lets the user add ad-hoc "label: value" rows for
    data with no dedicated field, without touching the code.
    ============================================================ */
+/* ============================================================
+   CUSTOM FIELD SUGGESTIONS (اقتراحات الحقول المخصصة)
+   Anything typed into a "custom field" row (اسم الحقل / القيمة) on
+   ANY screen that uses this widget (فتح ملف مريض جديد، الكشف،
+   فاتورة إضافية...) is remembered per-tenant. Two levels are kept:
+     - labels: every field NAME ever used → shared <datalist>,
+       shown under every "اسم الحقل" box.
+     - values: previous VALUES used under that *specific* label
+       (e.g. under "فصيلة الدم" → "O+", "A+"...), so the value
+       suggestions stay relevant to the field instead of one giant
+       mixed list. Each row gets its own value <datalist> that
+       refreshes live while the doctor is still typing the label.
+   Native <datalist> is used on purpose: zero extra UI/CSS, works
+   with RTL out of the box, and needs no custom dropdown logic.
+   ============================================================ */
+let cfLabelsCache = {};   // { normalizedKey: displayText }
+let cfValuesCache = {};   // { normalizedLabelKey: { normalizedValueKey: displayText } }
+let cfRowCounter = 0;
+
+function cfKey(str) {
+  return normalizeArabic(str).replace(/[.#$\[\]/]/g, "_").slice(0, 60) || "x";
+}
+function cfEscape(str) { return (str || "").toString().replace(/"/g, "&quot;"); }
+
+async function loadCfSuggestions() {
+  const snap = await get(ref(db, t("cfSuggestions")));
+  const data = snap.exists() ? snap.val() : {};
+  cfLabelsCache = data.labels || {};
+  cfValuesCache = data.values || {};
+}
+function refreshCfLabelDatalist() {
+  const dl = document.getElementById("cf-label-datalist");
+  if (!dl) return;
+  dl.innerHTML = Object.values(cfLabelsCache).map(v => `<option value="${cfEscape(v)}"></option>`).join("");
+}
+function refreshCfValueDatalist(datalistEl, label) {
+  if (!datalistEl) return;
+  const values = cfValuesCache[cfKey(label)] || {};
+  datalistEl.innerHTML = Object.values(values).map(v => `<option value="${cfEscape(v)}"></option>`).join("");
+}
+async function rememberCfLabel(label) {
+  const clean = (label || "").trim();
+  if (!clean) return;
+  const key = cfKey(clean);
+  if (cfLabelsCache[key] === clean) return; // already known, nothing new to save
+  cfLabelsCache[key] = clean;
+  refreshCfLabelDatalist();
+  try { await update(ref(db, t("cfSuggestions/labels")), { [key]: clean }); }
+  catch (err) { console.error("rememberCfLabel failed", err); }
+}
+async function rememberCfValue(label, value) {
+  const cleanLabel = (label || "").trim();
+  const cleanValue = (value || "").trim();
+  if (!cleanLabel || !cleanValue) return;
+  const labelKey = cfKey(cleanLabel);
+  const valueKey = cfKey(cleanValue);
+  if (cfValuesCache[labelKey]?.[valueKey] === cleanValue) return;
+  if (!cfValuesCache[labelKey]) cfValuesCache[labelKey] = {};
+  cfValuesCache[labelKey][valueKey] = cleanValue;
+  try { await update(ref(db, t(`cfSuggestions/values/${labelKey}`)), { [valueKey]: cleanValue }); }
+  catch (err) { console.error("rememberCfValue failed", err); }
+}
+
 function customFieldsAddRow(listId, label = "", value = "") {
   const wrap = document.getElementById(listId);
   const row = document.createElement("div");
+  const valueDlId = `cf-val-dl-${++cfRowCounter}`;
   row.className = "field-row custom-field-row";
   row.style.cssText = "align-items:flex-end;gap:8px;";
   row.innerHTML = `
-    <div class="field" style="flex:1;margin-bottom:0;"><label>اسم الحقل</label><input class="cf-label" placeholder="مثال: رقم التأمين"></div>
-    <div class="field" style="flex:1;margin-bottom:0;"><label>القيمة</label><input class="cf-value"></div>
+    <div class="field" style="flex:1;margin-bottom:0;"><label>اسم الحقل</label>
+      <input class="cf-label" list="cf-label-datalist" autocomplete="off" placeholder="مثال: رقم التأمين"></div>
+    <div class="field" style="flex:1;margin-bottom:0;"><label>القيمة</label>
+      <input class="cf-value" list="${valueDlId}" autocomplete="off"><datalist id="${valueDlId}"></datalist></div>
     <button type="button" class="btn btn-ghost btn-sm cf-remove">حذف</button>`;
-  row.querySelector(".cf-label").value = label;
-  row.querySelector(".cf-value").value = value;
+  const labelInput = row.querySelector(".cf-label");
+  const valueInput = row.querySelector(".cf-value");
+  const valueDatalist = row.querySelector(`#${valueDlId}`);
+  labelInput.value = label;
+  valueInput.value = value;
+  refreshCfValueDatalist(valueDatalist, label);
+  // Refresh which VALUE suggestions show up as the doctor is still typing/picking the label
+  labelInput.addEventListener("input", () => refreshCfValueDatalist(valueDatalist, labelInput.value));
+  // Remember for next time as soon as each box is left with real content in it
+  labelInput.addEventListener("change", () => rememberCfLabel(labelInput.value));
+  valueInput.addEventListener("change", () => rememberCfValue(labelInput.value, valueInput.value));
   row.querySelector(".cf-remove").addEventListener("click", () => row.remove());
   wrap.appendChild(row);
 }
@@ -2476,6 +2552,7 @@ function showApp() {
   document.getElementById("user-name").textContent = me.name || "—";
   document.getElementById("user-branch").textContent = me.branchId || "—";
   ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
+  loadCfSuggestions().then(refreshCfLabelDatalist).catch(err => console.error("loadCfSuggestions failed", err));
   wireNewPatientModal();
   document.getElementById("att-back-btn").onclick = () => showSection("doc-view-chart", "ملف الحالة");
   processAttachmentUploadQueue(); // resume any uploads left queued locally from a previous offline session
