@@ -244,6 +244,21 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .field input:focus,.field select:focus,.field textarea:focus { border-color:var(--primary); background:#fff; }
 .field-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
 
+/* ---- Custom field suggestion dropdown ----
+   Used by the reusable "custom fields" widget (patients, invoices,
+   visits — see customFieldsAddRow() in the script) to offer
+   previously-typed labels/values as the user types, since these
+   fields are almost always the same handful of recurring entries. */
+.custom-field-input-wrap { position:relative; }
+.cf-suggest-dropdown {
+  position:absolute; top:100%; inset-inline:0; margin-top:4px; z-index:60;
+  border:1px solid var(--line); border-radius:var(--radius-sm); background:#fff;
+  box-shadow:var(--shadow); max-height:220px; overflow-y:auto;
+}
+.cf-suggest-item { padding:9px 12px; font-size:.88rem; cursor:pointer; border-bottom:1px solid var(--line); }
+.cf-suggest-item:last-child { border-bottom:none; }
+.cf-suggest-item:hover { background:var(--canvas); }
+
 .queue-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
 .queue-item { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; background:#FBF9F4; border-radius:var(--radius-sm); padding:14px 16px; border-inline-start:5px solid var(--st-waiting); }
 .queue-item[data-status="in-clinic"] { border-inline-start-color:var(--st-inclinic); }
@@ -416,7 +431,6 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 </style>
 </head>
 <body>
-<datalist id="cf-label-datalist"></datalist>
 
 <!-- ===================== LOGIN SCREEN ===================== -->
 <div class="login-wrap" id="screen-login">
@@ -1083,94 +1097,49 @@ function todayKey() {
    CUSTOM FIELDS WIDGET (reusable everywhere: patients, invoices,
    visits...). Lets the user add ad-hoc "label: value" rows for
    data with no dedicated field, without touching the code.
-   ============================================================ */
-/* ============================================================
-   CUSTOM FIELD SUGGESTIONS (اقتراحات الحقول المخصصة)
-   Anything typed into a "custom field" row (اسم الحقل / القيمة) on
-   ANY screen that uses this widget (فتح ملف مريض جديد، الكشف،
-   فاتورة إضافية...) is remembered per-tenant. Two levels are kept:
-     - labels: every field NAME ever used → shared <datalist>,
-       shown under every "اسم الحقل" box.
-     - values: previous VALUES used under that *specific* label
-       (e.g. under "فصيلة الدم" → "O+", "A+"...), so the value
-       suggestions stay relevant to the field instead of one giant
-       mixed list. Each row gets its own value <datalist> that
-       refreshes live while the doctor is still typing the label.
-   Native <datalist> is used on purpose: zero extra UI/CSS, works
-   with RTL out of the box, and needs no custom dropdown logic.
-   ============================================================ */
-let cfLabelsCache = {};   // { normalizedKey: displayText }
-let cfValuesCache = {};   // { normalizedLabelKey: { normalizedValueKey: displayText } }
-let cfRowCounter = 0;
 
-function cfKey(str) {
-  return normalizeArabic(str).replace(/[.#$\[\]/]/g, "_").slice(0, 60) || "x";
-}
-function cfEscape(str) { return (str || "").toString().replace(/"/g, "&quot;"); }
+   Every label and value ever typed here is remembered per-clinic
+   (customFieldSuggestionsCache, synced live from
+   tenants/{tenantId}/customFieldSuggestions — see
+   subscribeCustomFieldSuggestions()/saveCustomFieldSuggestions()
+   below) and offered back as a suggestion dropdown while typing,
+   since these fields are almost always the same recurring handful
+   (e.g. "نوع التخدير: موضعي"). Picking a suggestion is only a
+   shortcut — free typing still works exactly as before.
+   ============================================================ */
+let customFieldSuggestionsCache = {}; // labelKey -> { label, values: { valueKey: { text, lastUsedAt } } } — kept live by subscribeCustomFieldSuggestions()
 
-async function loadCfSuggestions() {
-  const snap = await get(ref(db, t("cfSuggestions")));
-  const data = snap.exists() ? snap.val() : {};
-  cfLabelsCache = data.labels || {};
-  cfValuesCache = data.values || {};
-}
-function refreshCfLabelDatalist() {
-  const dl = document.getElementById("cf-label-datalist");
-  if (!dl) return;
-  dl.innerHTML = Object.values(cfLabelsCache).map(v => `<option value="${cfEscape(v)}"></option>`).join("");
-}
-function refreshCfValueDatalist(datalistEl, label) {
-  if (!datalistEl) return;
-  const values = cfValuesCache[cfKey(label)] || {};
-  datalistEl.innerHTML = Object.values(values).map(v => `<option value="${cfEscape(v)}"></option>`).join("");
-}
-async function rememberCfLabel(label) {
-  const clean = (label || "").trim();
-  if (!clean) return;
-  const key = cfKey(clean);
-  if (cfLabelsCache[key] === clean) return; // already known, nothing new to save
-  cfLabelsCache[key] = clean;
-  refreshCfLabelDatalist();
-  try { await update(ref(db, t("cfSuggestions/labels")), { [key]: clean }); }
-  catch (err) { console.error("rememberCfLabel failed", err); }
-}
-async function rememberCfValue(label, value) {
-  const cleanLabel = (label || "").trim();
-  const cleanValue = (value || "").trim();
-  if (!cleanLabel || !cleanValue) return;
-  const labelKey = cfKey(cleanLabel);
-  const valueKey = cfKey(cleanValue);
-  if (cfValuesCache[labelKey]?.[valueKey] === cleanValue) return;
-  if (!cfValuesCache[labelKey]) cfValuesCache[labelKey] = {};
-  cfValuesCache[labelKey][valueKey] = cleanValue;
-  try { await update(ref(db, t(`cfSuggestions/values/${labelKey}`)), { [valueKey]: cleanValue }); }
-  catch (err) { console.error("rememberCfValue failed", err); }
+/* Turns free text into a compact, stable, RTDB-safe key so the same
+   label/value (typed with different spacing, diacritics, or case)
+   always lands in the same suggestion bucket instead of piling up
+   near-duplicates. Keys are for lookup/de-dup only — the original,
+   as-typed text is always kept in the stored `.label` / `.text`. */
+function slugifyFieldKey(str) {
+  const cleaned = normalizeArabic(str).replace(/[.#$[\]/]/g, "").replace(/\s+/g, "_").slice(0, 60);
+  return cleaned || null;
 }
 
 function customFieldsAddRow(listId, label = "", value = "") {
   const wrap = document.getElementById(listId);
   const row = document.createElement("div");
-  const valueDlId = `cf-val-dl-${++cfRowCounter}`;
   row.className = "field-row custom-field-row";
   row.style.cssText = "align-items:flex-end;gap:8px;";
   row.innerHTML = `
-    <div class="field" style="flex:1;margin-bottom:0;"><label>اسم الحقل</label>
-      <input class="cf-label" list="cf-label-datalist" autocomplete="off" placeholder="مثال: رقم التأمين"></div>
-    <div class="field" style="flex:1;margin-bottom:0;"><label>القيمة</label>
-      <input class="cf-value" list="${valueDlId}" autocomplete="off"><datalist id="${valueDlId}"></datalist></div>
+    <div class="field custom-field-input-wrap" style="flex:1;margin-bottom:0;"><label>اسم الحقل</label>
+      <input class="cf-label" placeholder="مثال: رقم التأمين" autocomplete="off">
+      <div class="cf-suggest-dropdown" style="display:none;"></div>
+    </div>
+    <div class="field custom-field-input-wrap" style="flex:1;margin-bottom:0;"><label>القيمة</label>
+      <input class="cf-value" autocomplete="off">
+      <div class="cf-suggest-dropdown" style="display:none;"></div>
+    </div>
     <button type="button" class="btn btn-ghost btn-sm cf-remove">حذف</button>`;
   const labelInput = row.querySelector(".cf-label");
   const valueInput = row.querySelector(".cf-value");
-  const valueDatalist = row.querySelector(`#${valueDlId}`);
   labelInput.value = label;
   valueInput.value = value;
-  refreshCfValueDatalist(valueDatalist, label);
-  // Refresh which VALUE suggestions show up as the doctor is still typing/picking the label
-  labelInput.addEventListener("input", () => refreshCfValueDatalist(valueDatalist, labelInput.value));
-  // Remember for next time as soon as each box is left with real content in it
-  labelInput.addEventListener("change", () => rememberCfLabel(labelInput.value));
-  valueInput.addEventListener("change", () => rememberCfValue(labelInput.value, valueInput.value));
   row.querySelector(".cf-remove").addEventListener("click", () => row.remove());
+  wireCustomFieldSuggestionDropdowns(row, labelInput, valueInput);
   wrap.appendChild(row);
 }
 function wireCustomFieldsWidget(listId, addBtnId) {
@@ -1196,6 +1165,100 @@ function customFieldsWidgetHtml(listId, addBtnId) {
   return `<div class="field"><label>بيانات إضافية (اختياري)</label></div>
     <div id="${listId}"></div>
     <button type="button" class="btn btn-ghost btn-sm" id="${addBtnId}" style="margin-bottom:12px;">+ إضافة حقل</button>`;
+}
+
+/* ---- Suggestion dropdowns for one row ----
+   The label field suggests previously-used field names; the value
+   field suggests previously-used values for whichever label is
+   currently typed in that same row. Both filter live as you type,
+   Arabic-variant tolerant (via normalizeArabic), same as the smart
+   patient search above. */
+function wireCustomFieldSuggestionDropdowns(row, labelInput, valueInput) {
+  const [labelDropdown, valueDropdown] = row.querySelectorAll(".cf-suggest-dropdown");
+
+  function hideDropdown(dropdown) { dropdown.style.display = "none"; dropdown.innerHTML = ""; }
+  function renderDropdown(dropdown, items, onPick) {
+    if (!items.length) { hideDropdown(dropdown); return; }
+    dropdown.innerHTML = items.map((text, i) => `<div class="cf-suggest-item" data-i="${i}">${text}</div>`).join("");
+    dropdown.style.display = "";
+    dropdown.querySelectorAll(".cf-suggest-item").forEach(el =>
+      el.addEventListener("click", () => { onPick(items[Number(el.dataset.i)]); hideDropdown(dropdown); })
+    );
+  }
+  // De-dupes by normalized text (so "موضعي" and "موضعي " don't both
+  // show up) and filters by whatever's already typed, newest-looking
+  // matches first isn't tracked here — order simply follows storage.
+  function uniqueMatches(all, query) {
+    const q = normalizeArabic(query);
+    const seen = new Set();
+    const out = [];
+    all.forEach(text => {
+      const key = normalizeArabic(text);
+      if (!text || seen.has(key)) return;
+      if (q && !key.includes(q)) return;
+      seen.add(key); out.push(text);
+    });
+    return out.slice(0, 8);
+  }
+
+  labelInput.addEventListener("input", () => {
+    const allLabels = Object.values(customFieldSuggestionsCache).map(entry => entry.label);
+    renderDropdown(labelDropdown, uniqueMatches(allLabels, labelInput.value), (picked) => {
+      labelInput.value = picked;
+      valueInput.focus(); // move straight to the value — it'll show that label's own suggestions via the focus listener below
+    });
+  });
+
+  function renderValueSuggestions() {
+    const entry = customFieldSuggestionsCache[slugifyFieldKey(labelInput.value)];
+    const allValues = entry ? Object.values(entry.values || {}).map(v => v.text) : [];
+    renderDropdown(valueDropdown, uniqueMatches(allValues, valueInput.value), (picked) => { valueInput.value = picked; });
+  }
+  valueInput.addEventListener("focus", renderValueSuggestions);
+  valueInput.addEventListener("input", renderValueSuggestions);
+}
+// One shared, delegated listener (instead of one per row) closes any
+// open suggestion dropdown on an outside click — added once here so
+// adding/removing rows never piles up extra document-level listeners.
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".custom-field-input-wrap")) return;
+  document.querySelectorAll(".cf-suggest-dropdown").forEach(d => { d.style.display = "none"; d.innerHTML = ""; });
+});
+
+/* ---- Persistence (per clinic) ----
+   Every {label, value} pair saved anywhere in the app feeds back into
+   this shared pool so the *next* custom field of that name offers it
+   as a suggestion. subscribeCustomFieldSuggestions() is wired once in
+   showApp(); saveCustomFieldSuggestions() is called right after each
+   place that actually saves custom fields (new patient, exam,
+   invoice) — best-effort, so it never blocks or fails the real save. */
+function subscribeCustomFieldSuggestions(callback) {
+  const sRef = ref(db, t("customFieldSuggestions"));
+  return onValue(sRef, (snap) => {
+    const data = {};
+    snap.forEach(child => { data[child.key] = child.val(); });
+    callback(data);
+  });
+}
+async function saveCustomFieldSuggestions(customFields) {
+  if (!customFields || !Object.keys(customFields).length) return;
+  const updates = {};
+  const now = serverTimestamp();
+  Object.entries(customFields).forEach(([label, value]) => {
+    const labelKey = slugifyFieldKey(label);
+    if (!labelKey) return;
+    updates[t(`customFieldSuggestions/${labelKey}/label`)] = label;
+    updates[t(`customFieldSuggestions/${labelKey}/lastUsedAt`)] = now;
+    const trimmedValue = (value || "").toString().trim();
+    if (!trimmedValue) return;
+    const valueKey = slugifyFieldKey(trimmedValue);
+    if (!valueKey) return;
+    updates[t(`customFieldSuggestions/${labelKey}/values/${valueKey}/text`)] = trimmedValue;
+    updates[t(`customFieldSuggestions/${labelKey}/values/${valueKey}/lastUsedAt`)] = now;
+  });
+  if (!Object.keys(updates).length) return;
+  try { await update(ref(db), updates); }
+  catch (err) { console.error("saveCustomFieldSuggestions failed", err); }
 }
 
 /* ============================================================
@@ -2552,7 +2615,7 @@ function showApp() {
   document.getElementById("user-name").textContent = me.name || "—";
   document.getElementById("user-branch").textContent = me.branchId || "—";
   ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
-  loadCfSuggestions().then(refreshCfLabelDatalist).catch(err => console.error("loadCfSuggestions failed", err));
+  unsubs.push(subscribeCustomFieldSuggestions(data => { customFieldSuggestionsCache = data; }));
   wireNewPatientModal();
   document.getElementById("att-back-btn").onclick = () => showSection("doc-view-chart", "ملف الحالة");
   processAttachmentUploadQueue(); // resume any uploads left queued locally from a previous offline session
@@ -2995,6 +3058,7 @@ function wireNewPatientModal() {
     if (await findPatientByPhone(phone)) { msg.textContent = "توجد بالفعل حالة بهذا الرقم."; return; }
     const data = { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields };
     const patientId = await createPatient(me.branchId, data);
+    saveCustomFieldSuggestions(customFields);
     closeModal("modal-new-patient");
     const callback = newPatientCreatedCallback;
     newPatientCreatedCallback = null;
@@ -3385,6 +3449,7 @@ function wireExamPanel() {
       customFields: readCustomFields("v-cf-list")
     };
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
+    saveCustomFieldSuggestions(record.customFields);
     if (nextVisitDate) {
       await bookAppointment(nextVisitDate, {
         patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid,
@@ -3527,6 +3592,7 @@ function wireDoctorInvoicePanel() {
       discountAmount,
       total: finalAmount, paid: false, issuedBy: me.uid, customFields
     });
+    saveCustomFieldSuggestions(customFields);
     alert("تم إصدار الفاتورة وإرسالها للسكرتارية للتحصيل.");
     document.getElementById("fb-phone").value = "";
     selectedPatient = null;
