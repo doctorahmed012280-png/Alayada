@@ -149,6 +149,15 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
   .panel { padding:18px; border-radius:12px; }
   .topbar-search-group .btn-sm { padding:6px 10px; font-size:.78rem; }
 
+  /* Stacked rows instead of a 2-column table on narrow screens: each
+     row becomes a small block with its label above its value, so
+     nothing is squeezed into a horizontal scroll. */
+  .info-table, .info-table tbody, .info-table tr, .info-table th, .info-table td { display:block; width:auto; }
+  .info-table tr { padding:8px 0; border-bottom:1px solid var(--line); }
+  .info-table tr:last-child { border-bottom:none; }
+  .info-table th { padding:0 0 3px; border-bottom:none; font-size:.76rem; }
+  .info-table td { padding:0; border-bottom:none; }
+
   .login-wrap { padding:16px; }
   .login-card { width:100%; max-width:400px; padding:32px 24px; }
 
@@ -275,6 +284,17 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .timeline li::before { content:""; position:absolute; right:-7px; top:8px; width:12px; height:12px; border-radius:50%; background:var(--primary); border:2px solid var(--panel); }
 .timeline .t-date { font-size:.78rem; color:var(--bronze); font-weight:600; }
 .timeline .t-body { margin-top:3px; line-height:1.6; word-break:break-word; }
+
+/* ---- Generic label/value data table (patient header, clinical profile) ---- */
+.info-table { width:100%; border-collapse:collapse; }
+.info-table th, .info-table td { text-align:right; padding:10px 8px; border-bottom:1px solid var(--line); font-size:.92rem; line-height:1.5; vertical-align:top; word-break:break-word; }
+.info-table th { width:130px; color:var(--ink-soft); font-weight:600; white-space:nowrap; }
+.info-table tr:last-child th, .info-table tr:last-child td { border-bottom:none; }
+.info-table .name-cell { font-family:'Cairo',sans-serif; font-weight:800; font-size:1.1rem; color:var(--primary-d); }
+
+/* Clinical profile summary block sitting above the visit timeline */
+.clinical-profile-box { margin-bottom:16px; }
+.clinical-profile-box .empty-state { padding:16px 10px; }
 
 .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at 30% 20%, #35695B 0%, var(--primary-d) 55%, #16241F 100%); }
 .login-card { background:var(--panel); border-radius:18px; padding:40px 36px; width:380px; box-shadow:0 20px 60px rgba(0,0,0,.35); }
@@ -608,13 +628,15 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
       <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري حالة من الدور، أو ابحثي عنها بالأعلى لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
         <div class="panel">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
-            <div>
-              <h2 id="c-name" style="margin-bottom:4px;">—</h2>
-              <div class="mono" style="color:var(--ink-soft);" id="c-meta">—</div>
-              <div style="margin-top:4px;color:var(--ink-soft);font-size:.9rem;" id="c-address"></div>
-            </div>
-          </div>
+          <table class="info-table">
+            <tbody>
+              <tr><th>الاسم</th><td class="name-cell" id="c-name">—</td></tr>
+              <tr><th>الهاتف</th><td class="mono" id="c-phone">—</td></tr>
+              <tr><th>العمر</th><td id="c-age">—</td></tr>
+              <tr><th>فصيلة الدم</th><td id="c-blood">—</td></tr>
+              <tr><th>العنوان</th><td id="c-address">—</td></tr>
+            </tbody>
+          </table>
         </div>
         <div class="panel attachments-nav-card">
           <div class="attachments-nav-info">
@@ -629,14 +651,20 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
         <div class="grid-2">
           <div class="panel">
             <h3>السجل التاريخي للزيارات</h3>
+            <div class="clinical-profile-box" id="c-clinical-profile"></div>
             <ul class="timeline" id="c-timeline"><li class="empty-state">لا توجد زيارات سابقة</li></ul>
           </div>
           <div class="panel">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:2px;">
               <h3 style="margin:0;">كشف جديد</h3>
-              <button type="button" class="btn btn-ghost btn-sm" id="v-next-visit-btn">
-                <span id="v-next-visit-summary">+ موعد الزيارة القادمة</span>
-              </button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn btn-ghost btn-sm" id="v-clinical-profile-btn">
+                  <span id="v-clinical-profile-summary">+ بيانات أولية / أمراض مزمنة</span>
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" id="v-next-visit-btn">
+                  <span id="v-next-visit-summary">+ موعد الزيارة القادمة</span>
+                </button>
+              </div>
             </div>
             <input type="hidden" id="v-next-visit">
             <input type="hidden" id="v-next-visit-note">
@@ -672,6 +700,29 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
           <div style="display:flex;gap:10px;margin-top:6px;">
             <button type="button" class="btn btn-ghost" id="nv-clear-btn" style="flex:1;justify-content:center;">إلغاء الموعد</button>
             <button type="button" class="btn btn-primary" id="nv-save-btn" style="flex:1;justify-content:center;">حفظ الموعد</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fixed, replace-not-accumulate patient info (chronic conditions /
+           ongoing medications), stored separately from the visits list at
+           patients/{patientId}/clinicalProfile — see subscribePatientClinicalProfile()
+           and wireClinicalProfilePanel() below. -->
+      <div class="modal-overlay" id="modal-clinical-profile">
+        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-clinical-profile-title">
+          <div class="modal-box-header">
+            <h3 id="modal-clinical-profile-title">بيانات أولية / أمراض مزمنة</h3>
+            <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+          </div>
+          <div class="field"><label for="cp-chronic">الأمراض المزمنة</label>
+            <textarea id="cp-chronic" rows="3" placeholder="مثال: سكر، ضغط..."></textarea></div>
+          <div class="field"><label for="cp-meds">الأدوية المستمرة / حساسية دوائية</label>
+            <textarea id="cp-meds" rows="3" placeholder="مثال: أدوية مستمرة، حساسية من بنسلين..."></textarea></div>
+          <div id="cp-cf-list"></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="cp-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
+          <div class="error-msg" id="cp-error"></div>
+          <div style="display:flex;gap:10px;margin-top:6px;">
+            <button type="button" class="btn btn-primary" id="cp-save-btn" style="flex:1;justify-content:center;">حفظ البيانات الأولية</button>
           </div>
         </div>
       </div>
@@ -1430,6 +1481,17 @@ function subscribePatientTimeline(patientId, callback) {
     rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     callback(rows);
   });
+}
+/* Fixed, replace-not-accumulate patient info (chronic conditions,
+   ongoing medications...) kept in its own node — separate from
+   medicalRecords/{patientId} (the per-visit timeline above) — since
+   it describes the patient in general, not any one visit. */
+function subscribePatientClinicalProfile(patientId, callback) {
+  const cRef = ref(db, t(`patients/${patientId}/clinicalProfile`));
+  return onValue(cRef, (snap) => { callback(snap.val()); });
+}
+async function saveClinicalProfile(patientId, data) {
+  await set(ref(db, t(`patients/${patientId}/clinicalProfile`)), { ...data, updatedAt: serverTimestamp(), updatedBy: me.uid });
 }
 async function completeVisit({ branchId, patientId, doctorId, queueId, record }) {
   const recRef = push(ref(db, t(`medicalRecords/${patientId}`)));
@@ -3113,6 +3175,7 @@ function renderCollectionList(rows) {
    DOCTOR MODULE
    ============================================================ */
 let currentPatientId = null, currentQueueId = null;
+let currentClinicalProfile = null; // last-loaded patients/{id}/clinicalProfile, kept for the edit modal's prefill
 
 function initDoctor() {
   unsubs.push(subscribeToTodayQueue(me.branchId, renderDoctorQueue));
@@ -3207,9 +3270,10 @@ async function openPatientChart(patientId, queueId) {
   if (!pSnap.exists()) return;
   const patient = pSnap.val();
   document.getElementById("c-name").textContent = patient.name;
-  document.getElementById("c-meta").textContent = `${patient.phone || "—"} · ${displayAge(patient)} سنة · ${patient.bloodType ?? "—"}`;
-  const addressLine = displayAddress(patient);
-  document.getElementById("c-address").textContent = addressLine !== "—" ? `📍 ${addressLine}` : "";
+  document.getElementById("c-phone").textContent = patient.phone || "—";
+  document.getElementById("c-age").textContent = `${displayAge(patient)} سنة`;
+  document.getElementById("c-blood").textContent = patient.bloodType ?? "—";
+  document.getElementById("c-address").textContent = displayAddress(patient);
 
   unsubs.push(wireAttachmentsNavCard(patientId));
 
@@ -3225,6 +3289,11 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("vi-issue-msg").textContent = "";
   refreshExamInvoicePricing();
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
+  currentClinicalProfile = null;
+  unsubs.push(subscribePatientClinicalProfile(patientId, (data) => {
+    currentClinicalProfile = data || null;
+    renderClinicalProfile(currentClinicalProfile);
+  }));
 }
 
 /* Wires the compact "📎 الروشتات والتحاليل" card on the exam page: just
@@ -3264,7 +3333,10 @@ function wireAttachmentsNavCard(patientId) {
 function openPatientAttachmentsPage(patientId) {
   showSection("doc-view-attachments", "الروشتات والتحاليل");
   document.getElementById("att-patient-name").textContent = document.getElementById("c-name").textContent;
-  document.getElementById("att-patient-meta").textContent = document.getElementById("c-meta").textContent;
+  const phoneTxt = document.getElementById("c-phone").textContent;
+  const ageTxt = document.getElementById("c-age").textContent;
+  const bloodTxt = document.getElementById("c-blood").textContent;
+  document.getElementById("att-patient-meta").textContent = `${phoneTxt} · ${ageTxt} · ${bloodTxt}`;
   document.getElementById("doc-attachments-mount").innerHTML = attachmentsPanelHTML("c-attach");
   unsubs.push(wireAttachmentsPanel("c-attach", patientId));
 }
@@ -3286,6 +3358,27 @@ function resolveNextVisitStatus(nextVisitDate, allRows) {
   if (attended) return ` — تم عمل الزيارة في ${nextVisitDate}`;
   if (nextVisitDate < todayKey()) return ` — لم تتم الزيارة في ${nextVisitDate}`;
   return ` — الموعد القادم: ${nextVisitDate}`;
+}
+
+/* Draws the fixed "بيانات أولية / أمراض مزمنة" table above the visit
+   timeline (#c-clinical-profile). Independent from renderTimeline():
+   this reflects patients/{id}/clinicalProfile, not the visits list,
+   and shows an empty-state (not nothing) when unset so the doctor is
+   reminded the option exists — including for older patients who have
+   no clinicalProfile node at all yet. */
+function renderClinicalProfile(data) {
+  const box = document.getElementById("c-clinical-profile");
+  const customEntries = data && data.customFields ? Object.entries(data.customFields).filter(([, v]) => v) : [];
+  const hasData = !!(data && (data.chronicConditions || data.ongoingMedications || customEntries.length));
+  if (!hasData) {
+    box.innerHTML = `<div class="empty-state"><div class="icon">📋</div>لا توجد بيانات أولية مسجّلة بعد لهذا المريض</div>`;
+    return;
+  }
+  const rows = [];
+  if (data.chronicConditions) rows.push(`<tr><th>الأمراض المزمنة</th><td>${data.chronicConditions.replace(/\n/g, "<br>")}</td></tr>`);
+  if (data.ongoingMedications) rows.push(`<tr><th>الأدوية المستمرة</th><td>${data.ongoingMedications.replace(/\n/g, "<br>")}</td></tr>`);
+  customEntries.forEach(([k, v]) => rows.push(`<tr><th>${k}</th><td>${v}</td></tr>`));
+  box.innerHTML = `<table class="info-table"><tbody>${rows.join("")}</tbody></table>`;
 }
 
 function renderTimeline(rows) {
@@ -3433,11 +3526,50 @@ function wireNextVisitPanel() {
   });
 }
 
+/* Modal for the patient's fixed clinical profile (opened from the
+   v-clinical-profile-btn button in the exam panel). Unlike the exam
+   note, this data describes the patient in general and is saved with
+   set() (replace), not accumulated per visit — see saveClinicalProfile(). */
+function wireClinicalProfilePanel() {
+  wireCustomFieldsWidget("cp-cf-list", "cp-cf-add");
+  const chronicInput = document.getElementById("cp-chronic");
+  const medsInput = document.getElementById("cp-meds");
+  const errorEl = document.getElementById("cp-error");
+
+  document.getElementById("v-clinical-profile-btn").addEventListener("click", () => {
+    errorEl.textContent = "";
+    const data = currentClinicalProfile || {};
+    chronicInput.value = data.chronicConditions || "";
+    medsInput.value = data.ongoingMedications || "";
+    clearCustomFields("cp-cf-list");
+    Object.entries(data.customFields || {}).forEach(([label, value]) => customFieldsAddRow("cp-cf-list", label, value));
+    openModal("modal-clinical-profile");
+  });
+
+  document.getElementById("cp-save-btn").addEventListener("click", async () => {
+    if (!currentPatientId) return;
+    errorEl.textContent = "";
+    const data = {
+      chronicConditions: chronicInput.value.trim(),
+      ongoingMedications: medsInput.value.trim(),
+      customFields: readCustomFields("cp-cf-list")
+    };
+    try {
+      await saveClinicalProfile(currentPatientId, data);
+      closeModal("modal-clinical-profile");
+    } catch (err) {
+      console.error("تعذّر حفظ البيانات الأولية", err);
+      errorEl.textContent = "حدث خطأ أثناء الحفظ، حاولي مرة أخرى.";
+    }
+  });
+}
+
 function wireExamPanel() {
   wireCustomFieldsWidget("v-cf-list", "v-cf-add");
   wireExamInvoicePanel();
   wireExamInvoiceFab();
   wireNextVisitPanel();
+  wireClinicalProfilePanel();
   document.getElementById("v-complete-btn").onclick = async () => {
     if (!currentPatientId) return;
     const patientName = document.getElementById("c-name").textContent;
