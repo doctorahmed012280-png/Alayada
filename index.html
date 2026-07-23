@@ -267,6 +267,12 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .cf-suggest-item { padding:9px 12px; font-size:.88rem; cursor:pointer; border-bottom:1px solid var(--line); }
 .cf-suggest-item:last-child { border-bottom:none; }
 .cf-suggest-item:hover { background:var(--canvas); }
+/* "تثبيت" checkbox on each custom-field row: pins that field's label +
+   current value so it's pre-filled and ready next time the same form
+   opens (see readPinnedCustomFields()/populatePinnedFieldRows()). */
+.cf-pin-wrap { display:flex; align-items:center; gap:5px; font-size:.78rem; color:var(--ink-soft); white-space:nowrap; padding-bottom:11px; cursor:pointer; user-select:none; }
+.cf-pin-wrap input { width:auto; margin:0; accent-color:var(--primary); }
+@media (max-width:480px) { .cf-pin-wrap span { display:none; } }
 
 .queue-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
 .queue-item { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; background:#FBF9F4; border-radius:var(--radius-sm); padding:14px 16px; border-inline-start:5px solid var(--st-waiting); }
@@ -636,6 +642,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
               <tr><th>فصيلة الدم</th><td id="c-blood">—</td></tr>
               <tr><th>العنوان</th><td id="c-address">—</td></tr>
             </tbody>
+            <tbody id="c-extra-fields"></tbody>
           </table>
         </div>
         <div class="panel attachments-nav-card">
@@ -700,29 +707,6 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
           <div style="display:flex;gap:10px;margin-top:6px;">
             <button type="button" class="btn btn-ghost" id="nv-clear-btn" style="flex:1;justify-content:center;">إلغاء الموعد</button>
             <button type="button" class="btn btn-primary" id="nv-save-btn" style="flex:1;justify-content:center;">حفظ الموعد</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Fixed, replace-not-accumulate patient info (chronic conditions /
-           ongoing medications), stored separately from the visits list at
-           patients/{patientId}/clinicalProfile — see subscribePatientClinicalProfile()
-           and wireClinicalProfilePanel() below. -->
-      <div class="modal-overlay" id="modal-clinical-profile">
-        <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-clinical-profile-title">
-          <div class="modal-box-header">
-            <h3 id="modal-clinical-profile-title">بيانات أولية / أمراض مزمنة</h3>
-            <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
-          </div>
-          <div class="field"><label for="cp-chronic">الأمراض المزمنة</label>
-            <textarea id="cp-chronic" rows="3" placeholder="مثال: سكر، ضغط..."></textarea></div>
-          <div class="field"><label for="cp-meds">الأدوية المستمرة / حساسية دوائية</label>
-            <textarea id="cp-meds" rows="3" placeholder="مثال: أدوية مستمرة، حساسية من بنسلين..."></textarea></div>
-          <div id="cp-cf-list"></div>
-          <button type="button" class="btn btn-ghost btn-sm" id="cp-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
-          <div class="error-msg" id="cp-error"></div>
-          <div style="display:flex;gap:10px;margin-top:6px;">
-            <button type="button" class="btn btn-primary" id="cp-save-btn" style="flex:1;justify-content:center;">حفظ البيانات الأولية</button>
           </div>
         </div>
       </div>
@@ -932,11 +916,42 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
           <div class="field"><label for="np-city">المركز/الحي (اختياري)</label><select id="np-city"><option value="">اختاري المحافظة أولاً</option></select></div>
         </div>
         <div class="field"><label>الشارع/تفاصيل العنوان (اختياري)</label><input id="np-street" placeholder="اسم الشارع ورقم العقار"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="np-clinical-profile-btn" style="margin-bottom:14px;">
+          <span id="np-clinical-profile-summary">+ بيانات أولية / أمراض مزمنة</span>
+        </button>
         <div class="field"><label>بيانات إضافية (اختياري)</label></div>
         <div id="np-cf-list"></div>
         <button type="button" class="btn btn-ghost btn-sm" id="np-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
         <button class="btn btn-accent" id="np-create-btn">حفظ الحالة</button>
         <div class="error-msg" id="np-save-msg"></div>
+      </div>
+    </div>
+
+    <!-- ===== SHARED MODAL: fixed, replace-not-accumulate patient info
+         (chronic conditions / ongoing medications), stored separately
+         from the visits list at patients/{patientId}/clinicalProfile.
+         Used both from the doctor's exam page (v-clinical-profile-btn,
+         for an existing patient) and from the new-patient form above
+         (np-clinical-profile-btn, staged in pendingClinicalProfileDraft
+         until the patient is actually created) — kept outside any
+         role-specific <section> so it renders regardless of which page
+         is currently active. See wireClinicalProfilePanel() below. -->
+    <div class="modal-overlay" id="modal-clinical-profile">
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-clinical-profile-title">
+        <div class="modal-box-header">
+          <h3 id="modal-clinical-profile-title">بيانات أولية / أمراض مزمنة</h3>
+          <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+        </div>
+        <div class="field"><label for="cp-chronic">الأمراض المزمنة</label>
+          <textarea id="cp-chronic" rows="3" placeholder="مثال: سكر، ضغط..."></textarea></div>
+        <div class="field"><label for="cp-meds">الأدوية المستمرة / حساسية دوائية</label>
+          <textarea id="cp-meds" rows="3" placeholder="مثال: أدوية مستمرة، حساسية من بنسلين..."></textarea></div>
+        <div id="cp-cf-list"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="cp-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
+        <div class="error-msg" id="cp-error"></div>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button type="button" class="btn btn-primary" id="cp-save-btn" style="flex:1;justify-content:center;">حفظ البيانات الأولية</button>
+        </div>
       </div>
     </div>
 
@@ -1170,7 +1185,7 @@ function slugifyFieldKey(str) {
   return cleaned || null;
 }
 
-function customFieldsAddRow(listId, label = "", value = "") {
+function customFieldsAddRow(listId, label = "", value = "", pinned = false) {
   const wrap = document.getElementById(listId);
   const row = document.createElement("div");
   row.className = "field-row custom-field-row";
@@ -1184,6 +1199,10 @@ function customFieldsAddRow(listId, label = "", value = "") {
       <input class="cf-value" autocomplete="off">
       <div class="cf-suggest-dropdown" style="display:none;"></div>
     </div>
+    <label class="cf-pin-wrap" title="تثبيت هذا الحقل بقيمته الحالية ليظهر تلقائيًا جاهزًا في المرة القادمة">
+      <input type="checkbox" class="cf-pin"${pinned ? " checked" : ""}>
+      <span>تثبيت</span>
+    </label>
     <button type="button" class="btn btn-ghost btn-sm cf-remove">حذف</button>`;
   const labelInput = row.querySelector(".cf-label");
   const valueInput = row.querySelector(".cf-value");
@@ -1216,6 +1235,57 @@ function customFieldsWidgetHtml(listId, addBtnId) {
   return `<div class="field"><label>بيانات إضافية (اختياري)</label></div>
     <div id="${listId}"></div>
     <button type="button" class="btn btn-ghost btn-sm" id="${addBtnId}" style="margin-bottom:12px;">+ إضافة حقل</button>`;
+}
+
+/* ---- "Pinned" (fixed/template) custom fields ----
+   Ticking "تثبيت" next to a row remembers that field's label AND its
+   current value, per form (formKey) and per-clinic, so the next time
+   that same form is opened it comes pre-filled with the same rows
+   ready to go — a "fixed form" the doctor/secretary can still edit or
+   unpin at any time. Stored separately from the free-text suggestion
+   cache above (which only remembers labels/values for the autosuggest
+   dropdown, not "always show this by default"). */
+function readPinnedCustomFields(listId) {
+  const data = {};
+  document.querySelectorAll(`#${listId} .custom-field-row`).forEach(row => {
+    const pinBox = row.querySelector(".cf-pin");
+    if (!pinBox || !pinBox.checked) return;
+    const label = row.querySelector(".cf-label").value.trim();
+    const value = row.querySelector(".cf-value").value.trim();
+    if (label) data[label] = value;
+  });
+  return data;
+}
+async function loadPinnedFields(formKey) {
+  try {
+    const snap = await get(ref(db, t(`pinnedFields/${formKey}`)));
+    return snap.exists() ? snap.val() : {};
+  } catch (err) {
+    console.error("تعذّر تحميل الحقول المثبّتة", err);
+    return {};
+  }
+}
+async function savePinnedFields(formKey, labelValueMap) {
+  const data = {};
+  Object.entries(labelValueMap).forEach(([label, value]) => {
+    const key = slugifyFieldKey(label);
+    if (key) data[key] = { label, value };
+  });
+  try { await set(ref(db, t(`pinnedFields/${formKey}`)), data); }
+  catch (err) { console.error("تعذّر حفظ الحقول المثبّتة", err); }
+}
+/* Reads which rows are currently ticked "تثبيت" and persists exactly
+   that set as the form's fixed template (replacing the previous one) —
+   call this right before clearing the widget on save. */
+async function persistPinnedFields(listId, formKey) {
+  await savePinnedFields(formKey, readPinnedCustomFields(listId));
+}
+/* Adds one pre-filled, pre-ticked row per previously-pinned field —
+   call after clearCustomFields() when opening a form that has no
+   other data to prefill from. */
+async function populatePinnedFieldRows(listId, formKey) {
+  const pinned = await loadPinnedFields(formKey);
+  Object.values(pinned).forEach(entry => customFieldsAddRow(listId, entry.label, entry.value, true));
 }
 
 /* ---- Suggestion dropdowns for one row ----
@@ -2679,6 +2749,7 @@ function showApp() {
   ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
   unsubs.push(subscribeCustomFieldSuggestions(data => { customFieldSuggestionsCache = data; }));
   wireNewPatientModal();
+  wireClinicalProfilePanel();
   document.getElementById("att-back-btn").onclick = () => showSection("doc-view-chart", "ملف الحالة");
   processAttachmentUploadQueue(); // resume any uploads left queued locally from a previous offline session
   updateStickyOffsets();
@@ -3121,6 +3192,12 @@ function wireNewPatientModal() {
     const data = { name, phone, dob, bloodType, emergencyContact, governorate, city, street, customFields };
     const patientId = await createPatient(me.branchId, data);
     saveCustomFieldSuggestions(customFields);
+    await persistPinnedFields("np-cf-list", "np");
+    if (pendingClinicalProfileDraft) {
+      try { await saveClinicalProfile(patientId, pendingClinicalProfileDraft); }
+      catch (err) { console.error("تعذّر حفظ البيانات الأولية للحالة الجديدة", err); }
+      pendingClinicalProfileDraft = null;
+    }
     closeModal("modal-new-patient");
     const callback = newPatientCreatedCallback;
     newPatientCreatedCallback = null;
@@ -3131,7 +3208,7 @@ function wireNewPatientModal() {
 /* Resets the shared form to a blank state, shows the modal, and
    registers what should happen with the newly created patient
    (open her chart, show her in a search-result panel, etc). */
-function openNewPatientModal(onCreated) {
+async function openNewPatientModal(onCreated) {
   ["np-name", "np-phone", "np-dob", "np-emergency", "np-street"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("np-blood").value = "O+";
   document.getElementById("np-phone-error").style.display = "none";
@@ -3139,6 +3216,9 @@ function openNewPatientModal(onCreated) {
   document.getElementById("np-governorate").value = "";
   populateMarkazSelect(document.getElementById("np-city"), "");
   clearCustomFields("np-cf-list");
+  await populatePinnedFieldRows("np-cf-list", "np");
+  pendingClinicalProfileDraft = null;
+  refreshPendingClinicalProfileSummary();
   newPatientCreatedCallback = onCreated || null;
   openModal("modal-new-patient");
 }
@@ -3274,6 +3354,8 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("c-age").textContent = `${displayAge(patient)} سنة`;
   document.getElementById("c-blood").textContent = patient.bloodType ?? "—";
   document.getElementById("c-address").textContent = displayAddress(patient);
+  const extraEntries = Object.entries(patient.customFields || {}).filter(([, v]) => v);
+  document.getElementById("c-extra-fields").innerHTML = extraEntries.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("");
 
   unsubs.push(wireAttachmentsNavCard(patientId));
 
@@ -3281,6 +3363,8 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("v-next-visit").value = "";
   document.getElementById("v-next-visit-note").value = "";
   refreshNextVisitSummary();
+  clearCustomFields("v-cf-list");
+  populatePinnedFieldRows("v-cf-list", "v");
   document.getElementById("vi-label").value = "سونار";
   document.getElementById("vi-amount").value = "0";
   document.getElementById("vi-discount-type").value = "none";
@@ -3526,10 +3610,35 @@ function wireNextVisitPanel() {
   });
 }
 
-/* Modal for the patient's fixed clinical profile (opened from the
-   v-clinical-profile-btn button in the exam panel). Unlike the exam
-   note, this data describes the patient in general and is saved with
-   set() (replace), not accumulated per visit — see saveClinicalProfile(). */
+/* Modal for the patient's fixed clinical profile — shared between two
+   entry points:
+     - v-clinical-profile-btn (exam page, existing patient): saves
+       straight to patients/{currentPatientId}/clinicalProfile.
+     - np-clinical-profile-btn (new-patient form, patient doesn't exist
+       yet): stages the data in pendingClinicalProfileDraft; np-create-btn's
+       handler below writes it to Firebase right after the patient itself
+       is created.
+   Unlike the exam note, this data describes the patient in general and
+   is saved with set() (replace), not accumulated per visit — see
+   saveClinicalProfile(). clinicalProfileModalMode tracks which of the
+   two save behaviors cp-save-btn should perform. */
+let clinicalProfileModalMode = "existing"; // "existing" | "pending"
+let pendingClinicalProfileDraft = null; // { chronicConditions, ongoingMedications, customFields } staged for a not-yet-created patient
+function refreshPendingClinicalProfileSummary() {
+  document.getElementById("np-clinical-profile-summary").textContent =
+    pendingClinicalProfileDraft ? "📋 تم إضافة بيانات أولية (تعديل)" : "+ بيانات أولية / أمراض مزمنة";
+}
+async function openClinicalProfileModal(mode, data) {
+  clinicalProfileModalMode = mode;
+  document.getElementById("cp-error").textContent = "";
+  document.getElementById("cp-chronic").value = data.chronicConditions || "";
+  document.getElementById("cp-meds").value = data.ongoingMedications || "";
+  clearCustomFields("cp-cf-list");
+  const existingEntries = Object.entries(data.customFields || {});
+  if (existingEntries.length) existingEntries.forEach(([label, value]) => customFieldsAddRow("cp-cf-list", label, value));
+  else await populatePinnedFieldRows("cp-cf-list", "cp");
+  openModal("modal-clinical-profile");
+}
 function wireClinicalProfilePanel() {
   wireCustomFieldsWidget("cp-cf-list", "cp-cf-add");
   const chronicInput = document.getElementById("cp-chronic");
@@ -3537,23 +3646,28 @@ function wireClinicalProfilePanel() {
   const errorEl = document.getElementById("cp-error");
 
   document.getElementById("v-clinical-profile-btn").addEventListener("click", () => {
-    errorEl.textContent = "";
-    const data = currentClinicalProfile || {};
-    chronicInput.value = data.chronicConditions || "";
-    medsInput.value = data.ongoingMedications || "";
-    clearCustomFields("cp-cf-list");
-    Object.entries(data.customFields || {}).forEach(([label, value]) => customFieldsAddRow("cp-cf-list", label, value));
-    openModal("modal-clinical-profile");
+    openClinicalProfileModal("existing", currentClinicalProfile || {});
+  });
+  document.getElementById("np-clinical-profile-btn").addEventListener("click", () => {
+    openClinicalProfileModal("pending", pendingClinicalProfileDraft || {});
   });
 
   document.getElementById("cp-save-btn").addEventListener("click", async () => {
-    if (!currentPatientId) return;
     errorEl.textContent = "";
     const data = {
       chronicConditions: chronicInput.value.trim(),
       ongoingMedications: medsInput.value.trim(),
       customFields: readCustomFields("cp-cf-list")
     };
+    await persistPinnedFields("cp-cf-list", "cp");
+    if (clinicalProfileModalMode === "pending") {
+      const isEmpty = !data.chronicConditions && !data.ongoingMedications && !Object.keys(data.customFields).length;
+      pendingClinicalProfileDraft = isEmpty ? null : data;
+      refreshPendingClinicalProfileSummary();
+      closeModal("modal-clinical-profile");
+      return;
+    }
+    if (!currentPatientId) return;
     try {
       await saveClinicalProfile(currentPatientId, data);
       closeModal("modal-clinical-profile");
@@ -3569,7 +3683,6 @@ function wireExamPanel() {
   wireExamInvoicePanel();
   wireExamInvoiceFab();
   wireNextVisitPanel();
-  wireClinicalProfilePanel();
   document.getElementById("v-complete-btn").onclick = async () => {
     if (!currentPatientId) return;
     const patientName = document.getElementById("c-name").textContent;
@@ -3582,6 +3695,7 @@ function wireExamPanel() {
     };
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
     saveCustomFieldSuggestions(record.customFields);
+    await persistPinnedFields("v-cf-list", "v");
     if (nextVisitDate) {
       await bookAppointment(nextVisitDate, {
         patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid,
@@ -3595,6 +3709,7 @@ function wireExamPanel() {
     document.getElementById("v-next-visit-note").value = "";
     refreshNextVisitSummary();
     clearCustomFields("v-cf-list");
+    populatePinnedFieldRows("v-cf-list", "v");
     loadAndRenderDoctorAppointments();
   };
 }
