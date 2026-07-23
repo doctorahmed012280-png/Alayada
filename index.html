@@ -849,6 +849,25 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 
     <!-- ===== SETTINGS: shared by both roles ===== -->
     <section id="view-settings" style="display:none;">
+      <!-- ---- Branches: the clinic's physical locations. Added first,
+           above staff accounts, since a branch needs to exist before a
+           new secretary/doctor account can be assigned to it. Adding a
+           branch can optionally also move an existing doctor/owner
+           account here in the same step — see addBranch() — since every
+           staff account belongs to exactly one branch. ---- -->
+      <div class="grid-2">
+        <div class="panel">
+          <h3>إضافة فرع جديد</h3>
+          <div class="field"><label for="br-name">اسم الفرع</label><input id="br-name" placeholder="مثال: فرع المعادي"></div>
+          <div class="field"><label for="br-doctor">الطبيب المسؤول عن الفرع (اختياري)</label><select id="br-doctor"></select></div>
+          <button class="btn btn-accent" id="br-add-btn">إضافة الفرع</button>
+          <div class="error-msg" id="br-error"></div>
+        </div>
+        <div class="panel">
+          <h3>الفروع الحالية</h3>
+          <ul class="timeline" id="br-list"><li class="empty-state">جاري التحميل…</li></ul>
+        </div>
+      </div>
       <div class="grid-2">
         <div class="panel">
           <h3>إضافة حساب جديد</h3>
@@ -2745,7 +2764,8 @@ function showApp() {
   document.getElementById("screen-login").style.display = "none";
   document.getElementById("screen-app").style.display = "";
   document.getElementById("user-name").textContent = me.name || "—";
-  document.getElementById("user-branch").textContent = me.branchId || "—";
+  document.getElementById("user-branch").textContent = me.branchId || "—"; // immediate fallback; replaced with the real name below as soon as it loads
+  updateUserBranchLabel();
   ensureOwnerStaffRecord().catch(err => console.error("ensureOwnerStaffRecord failed", err));
   unsubs.push(subscribeCustomFieldSuggestions(data => { customFieldSuggestionsCache = data; }));
   wireNewPatientModal();
@@ -2756,6 +2776,22 @@ function showApp() {
   if (me.role === "owner") buildDoctorNav(true);
   else if (me.role === "doctor") buildDoctorNav(false);
   else if (me.role === "secretary") buildSecretaryNav();
+}
+
+/* The sidebar/drawer user-card shows this next to the signed-in
+   person's name — a raw branch key (branch_01, or an auto-generated
+   push id for anything added later from الإعدادات) isn't meaningful to
+   read, so this swaps in the branch's actual "name" field once it
+   loads. Runs for every role (not just owner/doctor), independently of
+   whether الإعدادات/branchesCache was ever loaded this session. */
+async function updateUserBranchLabel() {
+  if (!me || !me.branchId) return;
+  try {
+    const snap = await get(ref(db, t(`branches/${me.branchId}/name`)));
+    if (snap.exists()) document.getElementById("user-branch").textContent = snap.val();
+  } catch (err) {
+    console.error("load branch name failed", err);
+  }
 }
 
 /* ============================================================
@@ -3256,13 +3292,36 @@ function renderCollectionList(rows) {
    ============================================================ */
 let currentPatientId = null, currentQueueId = null;
 let currentClinicalProfile = null; // last-loaded patients/{id}/clinicalProfile, kept for the edit modal's prefill
+/* Kept separately from the generic `unsubs` bucket (still pushed there
+   too, for the normal logout-time cleanup) so switchDoctorActiveBranch()
+   below can detach and replace just this ONE listener on demand,
+   without disturbing anything else the doctor's session is watching. */
+let doctorQueueUnsub = null;
 
 function initDoctor() {
-  unsubs.push(subscribeToTodayQueue(me.branchId, renderDoctorQueue));
+  doctorQueueUnsub = subscribeToTodayQueue(me.branchId, renderDoctorQueue);
+  unsubs.push(doctorQueueUnsub);
   wireExamPanel();
   wireAbbrevReference();
   wireChartPatientSearch();
   loadAndRenderDoctorAppointments();
+}
+
+/* Called from wireSettingsPanel()'s "إضافة الفرع" handler when the
+   owner assigns a brand-new branch to their OWN account. Every other
+   place that reads me.branchId (createPatient, createInvoice,
+   completeVisit...) reads it fresh at the moment it's used, so simply
+   updating it here is enough for those — the doctor's queue, however,
+   is a live onValue() subscription opened against the OLD branch back
+   in initDoctor(), so that one has to be explicitly torn down and
+   reopened against the new branch for the switch to actually show up
+   without a logout/login. */
+function switchDoctorActiveBranch(newBranchId) {
+  me.branchId = newBranchId;
+  if (doctorQueueUnsub) { doctorQueueUnsub(); doctorQueueUnsub = null; }
+  doctorQueueUnsub = subscribeToTodayQueue(me.branchId, renderDoctorQueue);
+  unsubs.push(doctorQueueUnsub);
+  updateUserBranchLabel();
 }
 
 /* Lets the doctor jump straight to any existing patient's medical
@@ -3853,22 +3912,30 @@ function wireDoctorInvoicePanel() {
 
 /* ============================================================
    SETTINGS — shared by both roles: create secretary/doctor
-   accounts and list who already has one.
+   accounts, manage branches, and list who already has one.
    ============================================================ */
 let settingsWired = false;
+/* branchId -> {name, active, ...}, refreshed by loadBranchesForSettings()
+   (the very first thing initSettings() does). Shared by the "s-branch"
+   dropdown on the account-creation form, the branches list/management
+   panel, and renderAccountsList() — so every branch reference in
+   الإعدادات shows an actual name instead of a raw database key. */
+let branchesCache = {};
 
 async function initSettings() {
   await loadBranchesForSettings();
+  await renderBranchesManagementPanel();
   await renderAccountsList();
   if (!settingsWired) { wireSettingsPanel(); settingsWired = true; }
 }
 
 async function loadBranchesForSettings() {
-  const sel = document.getElementById("s-branch");
   const snap = await get(ref(db, t("branches")));
+  branchesCache = snap.exists() ? snap.val() : {};
+  const sel = document.getElementById("s-branch");
   sel.innerHTML = "";
-  if (snap.exists()) {
-    Object.entries(snap.val()).forEach(([id, b]) => {
+  if (Object.keys(branchesCache).length) {
+    Object.entries(branchesCache).forEach(([id, b]) => {
       const opt = document.createElement("option");
       opt.value = id; opt.textContent = b.name || id;
       sel.appendChild(opt);
@@ -3876,6 +3943,72 @@ async function loadBranchesForSettings() {
   } else {
     sel.innerHTML = `<option value="branch_01">الفرع الرئيسي</option>`;
   }
+}
+
+/* ---- Branches management ----
+   Lists every branch with whoever (doctor/owner) is currently assigned
+   to it, and refreshes the "الطبيب المسؤول عن الفرع" dropdown used when
+   adding a new one. Reads tenants/{id}/staff itself (same self-heal
+   fallback as renderAccountsList() below, kept independent since the
+   two panels render separately) rather than sharing one fetch, so
+   either can be refreshed without the other. */
+async function renderBranchesManagementPanel() {
+  const staffSnap = await get(ref(db, t("staff")));
+  const staffRows = staffSnap.exists() ? Object.entries(staffSnap.val()).map(([id, u]) => ({ id, ...u })) : [];
+  if (!staffRows.some(u => u.id === me.uid)) {
+    staffRows.unshift({ id: me.uid, name: me.name, username: me.email, role: "owner", branchId: me.branchId });
+  }
+  const doctorRows = staffRows.filter(u => u.role === "doctor" || u.role === "owner");
+
+  const list = document.getElementById("br-list");
+  const branchEntries = Object.entries(branchesCache);
+  if (!branchEntries.length) {
+    list.innerHTML = `<li class="empty-state">لا توجد فروع بعد</li>`;
+  } else {
+    list.innerHTML = "";
+    branchEntries.forEach(([id, b]) => {
+      const assigned = doctorRows.filter(d => d.branchId === id).map(d => d.name).join("، ");
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="t-date">${b.active === false ? "غير نشط" : "نشط"}</div>
+        <div class="t-body"><strong>${b.name || id}</strong><br>
+        <span style="font-size:.82rem;color:var(--ink-soft);">👨‍⚕️ ${assigned || "لا يوجد طبيب معيّن بعد"}</span></div>`;
+      list.appendChild(li);
+    });
+  }
+
+  const doctorSel = document.getElementById("br-doctor");
+  doctorSel.innerHTML = `<option value="">بدون تعيين الآن</option>` +
+    doctorRows.map(d => {
+      const branchName = (branchesCache[d.branchId] && branchesCache[d.branchId].name) || d.branchId || "—";
+      return `<option value="${d.id}">${d.name || "—"}${d.id === me.uid ? " (أنا)" : ""} — حاليًا في ${branchName}</option>`;
+    }).join("");
+}
+
+/* Creates a new branch and, if a doctor/owner was picked in "الطبيب
+   المسؤول عن الفرع", moves that account to it in the same multi-path
+   update — every staff account belongs to exactly one branch (see the
+   MULTI-TENANCY MODEL note above), so "assign a doctor to the new
+   branch" and "move their account here" are the same operation. Left
+   unassigned, the branch can still be staffed afterwards the normal
+   way, from "إضافة حساب جديد". Returns the new branch's id so the
+   caller can switch its own live session to it if it just moved itself. */
+async function addBranch(name, doctorUid) {
+  const newRef = push(ref(db, t("branches")));
+  const newBranchId = newRef.key;
+  const updates = {};
+  updates[t(`branches/${newBranchId}`)] = { name, active: true, createdAt: serverTimestamp() };
+
+  if (doctorUid) {
+    const doctorSnap = await get(ref(db, t(`staff/${doctorUid}`)));
+    const oldBranchId = doctorSnap.exists() ? doctorSnap.val().branchId : null;
+    updates[t(`staff/${doctorUid}/branchId`)] = newBranchId;
+    updates[`accounts/${doctorUid}/branchId`] = newBranchId;
+    if (oldBranchId && oldBranchId !== newBranchId) updates[t(`branch_users_index/${oldBranchId}/${doctorUid}`)] = null;
+    updates[t(`branch_users_index/${newBranchId}/${doctorUid}`)] = true;
+  }
+
+  await update(ref(db), updates);
+  return newBranchId;
 }
 
 async function renderAccountsList() {
@@ -3892,13 +4025,38 @@ async function renderAccountsList() {
   rows.forEach(u => {
     const li = document.createElement("li");
     const roleLabel = u.role === "doctor" ? "طبيب" : (u.role === "secretary" ? "سكرتارية" : "صاحب/ة العيادة");
-    li.innerHTML = `<div class="t-date">${roleLabel} — ${u.branchId || "—"}</div>
+    const branchLabel = (branchesCache[u.branchId] && branchesCache[u.branchId].name) || u.branchId || "—";
+    li.innerHTML = `<div class="t-date">${roleLabel} — ${branchLabel}</div>
       <div class="t-body"><strong>${u.name || "—"}</strong> — <span class="mono">${u.username || "—"}</span></div>`;
     list.appendChild(li);
   });
 }
 
 function wireSettingsPanel() {
+  document.getElementById("br-add-btn").onclick = async () => {
+    const errorBox = document.getElementById("br-error");
+    errorBox.textContent = "";
+    const name = document.getElementById("br-name").value.trim();
+    if (!name) { errorBox.textContent = "من فضلك اكتبي اسم الفرع."; return; }
+    const doctorUid = document.getElementById("br-doctor").value;
+
+    try {
+      const newBranchId = await addBranch(name, doctorUid);
+      // If the owner assigned the new branch to themselves, their own
+      // live session needs to move over too — otherwise they'd still be
+      // watching their old branch's queue until their next login.
+      if (doctorUid && doctorUid === me.uid) switchDoctorActiveBranch(newBranchId);
+
+      document.getElementById("br-name").value = "";
+      await loadBranchesForSettings();
+      await renderBranchesManagementPanel();
+      await renderAccountsList();
+    } catch (err) {
+      errorBox.textContent = `تعذّر إضافة الفرع (${err.code || err.message}).`;
+      console.error("add branch failed", err);
+    }
+  };
+
   const abList = document.getElementById("ab-list");
   subscribeAbbreviations((rows) => {
     if (!rows.length) { abList.innerHTML = `<li class="empty-state">لا توجد اختصارات بعد</li>`; return; }
