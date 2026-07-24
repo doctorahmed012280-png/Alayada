@@ -321,6 +321,19 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .patient-strip .ps-item > span { color:var(--ink-soft); font-size:.8rem; font-weight:600; white-space:nowrap; }
 .patient-strip .ps-item > b { font-weight:700; word-break:break-word; }
 #c-extra-fields { display:contents; }
+/* البيانات الأولية take their own full-width row under the basic data
+   and lay out as a real grid — several pairs per line with room to
+   breathe — instead of squeezing into a narrow column beside the
+   phone/address items. */
+#c-profile-fields {
+  flex:1 1 100%; display:grid; grid-template-columns:repeat(auto-fill,minmax(105px,1fr));
+  gap:10px 16px; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);
+}
+#c-profile-fields:empty { display:none; }
+#c-profile-fields .ps-item { gap:7px; font-size:.95rem; }
+#c-profile-fields .ps-item > span { font-size:.82rem; }
+@media (min-width:700px) { #c-profile-fields { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); } }
+.ps-edit-btn { flex:1 1 100%; justify-content:center; margin-top:12px; }
 @media (max-width:620px) {
   .patient-strip .ps-name { width:100%; border-inline-end:none; padding-inline-end:0;
     border-bottom:1px solid var(--line); padding-bottom:8px; }
@@ -398,7 +411,6 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
    The exam page only shows a compact summary + button here; the
    actual upload UI (camera, file picker, grid) lives on its own
    page so the exam page stays uncluttered — see #doc-view-attachments. */
-.ps-edit-btn { flex-shrink:0; font-size:.78rem; padding:5px 10px; }
 .ps-attach-btn { flex-shrink:0; gap:4px; }
 .ps-attach-count { display:inline-flex; align-items:center; justify-content:center; min-width:19px; height:19px;
   padding:0 5px; border-radius:999px; background:rgba(255,255,255,.28); font-size:.75rem; font-weight:800; }
