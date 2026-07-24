@@ -336,20 +336,23 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
   margin:18px 0 12px; padding-top:16px; border-top:1px dashed var(--line); }
 .metrics-head h3 { margin:0; }
 .metrics-hint { width:100%; margin:0; color:var(--ink-soft); font-size:.8rem; }
-.cf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px; }
+.cf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
+@media (min-width:1250px) { .cf-grid { grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); } }
+@media (max-width:420px) { .cf-grid { grid-template-columns:1fr; } }
 .cf-grid .custom-field-row {
-  display:flex !important; flex-wrap:nowrap; align-items:center; gap:6px !important;
-  background:#FBF9F4; border:1px solid var(--line); border-radius:var(--radius-sm); padding:7px 9px; margin:0;
+  display:flex !important; flex-wrap:nowrap; align-items:center; gap:4px !important; min-width:0;
+  background:#FBF9F4; border:1px solid var(--line); border-radius:var(--radius-sm); padding:5px 6px; margin:0;
 }
-.cf-grid .custom-field-row .field { margin-bottom:0; gap:0; }
+.cf-grid .custom-field-row .field { margin-bottom:0; gap:0; min-width:0; }
 .cf-grid .custom-field-row .field label { display:none; }
-.cf-grid .cf-label, .cf-grid .cf-value { padding:7px 9px; font-size:.9rem; background:#fff; }
-.cf-grid .custom-field-input-wrap:first-of-type { flex:1 1 55%; }
-.cf-grid .custom-field-input-wrap:nth-of-type(2) { flex:1 1 45%; }
+.cf-grid .cf-label, .cf-grid .cf-value { padding:6px 7px; font-size:.88rem; background:#fff; }
+/* اسم المعطى ← قيمته، جنب بعض جوّه نفس الخانة */
+.cf-grid .custom-field-input-wrap:first-of-type { flex:1 1 58%; min-width:0; }
+.cf-grid .custom-field-input-wrap:nth-of-type(2) { flex:1 1 42%; min-width:0; }
 .cf-grid .cf-value { font-weight:700; text-align:center; }
-.cf-grid .cf-pin-wrap { padding-bottom:0; }
+.cf-grid .cf-pin-wrap { padding-bottom:0; flex:0 0 auto; }
 .cf-grid .cf-pin-wrap span { display:none; }
-.cf-grid .cf-remove { padding:4px 8px; font-size:.78rem; border:none; color:var(--st-cancelled); }
+.cf-grid .cf-remove { flex:0 0 auto; padding:2px 5px; font-size:.8rem; border:none; background:transparent; color:var(--st-cancelled); }
 .cf-grid:empty { display:none; }
 
 /* Clinical profile summary block sitting above the visit timeline */
