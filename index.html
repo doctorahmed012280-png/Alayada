@@ -335,25 +335,28 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .metrics-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
   margin:18px 0 12px; padding-top:16px; border-top:1px dashed var(--line); }
 .metrics-head h3 { margin:0; }
-.cp-inline-msg { font-size:.82rem; color:var(--st-done); font-weight:700; }
 .metrics-hint { width:100%; margin:0; color:var(--ink-soft); font-size:.8rem; }
-.cf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
-@media (min-width:1250px) { .cf-grid { grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); } }
-@media (max-width:420px) { .cf-grid { grid-template-columns:1fr; } }
+/* Two pairs per row even on a phone: the boxes are sized to what
+   actually gets typed in them (short labels like LMP/EDD and small
+   numeric values), not stretched to fill the panel. */
+.cf-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+@media (min-width:700px) { .cf-grid { grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:8px; } }
 .cf-grid .custom-field-row {
-  display:flex !important; flex-wrap:nowrap; align-items:center; gap:4px !important; min-width:0;
-  background:#FBF9F4; border:1px solid var(--line); border-radius:var(--radius-sm); padding:5px 6px; margin:0;
+  display:flex !important; flex-wrap:nowrap; align-items:center; gap:3px !important; min-width:0;
+  background:#FBF9F4; border:1px solid var(--line); border-radius:var(--radius-sm); padding:4px; margin:0;
 }
 .cf-grid .custom-field-row .field { margin-bottom:0; gap:0; min-width:0; }
 .cf-grid .custom-field-row .field label { display:none; }
-.cf-grid .cf-label, .cf-grid .cf-value { padding:6px 7px; font-size:.88rem; background:#fff; }
+.cf-grid .cf-label, .cf-grid .cf-value { padding:5px 4px; font-size:.85rem; background:#fff; text-align:center; }
 /* اسم المعطى ← قيمته، جنب بعض جوّه نفس الخانة */
-.cf-grid .custom-field-input-wrap:first-of-type { flex:1 1 58%; min-width:0; }
-.cf-grid .custom-field-input-wrap:nth-of-type(2) { flex:1 1 42%; min-width:0; }
-.cf-grid .cf-value { font-weight:700; text-align:center; }
-.cf-grid .cf-pin-wrap { padding-bottom:0; flex:0 0 auto; }
+.cf-grid .custom-field-input-wrap:first-of-type { flex:1 1 50%; min-width:0; }
+.cf-grid .custom-field-input-wrap:nth-of-type(2) { flex:1 1 50%; min-width:0; }
+.cf-grid .cf-label { font-weight:600; }
+.cf-grid .cf-value { font-weight:700; }
+.cf-grid .cf-pin-wrap { padding-bottom:0; flex:0 0 auto; gap:0; font-size:.7rem; }
 .cf-grid .cf-pin-wrap span { display:none; }
-.cf-grid .cf-remove { flex:0 0 auto; padding:2px 5px; font-size:.8rem; border:none; background:transparent; color:var(--st-cancelled); }
+.cf-grid .cf-pin-wrap input { width:13px; height:13px; }
+.cf-grid .cf-remove { flex:0 0 auto; padding:0 3px; font-size:.75rem; border:none; background:transparent; color:var(--st-cancelled); }
 .cf-grid:empty { display:none; }
 
 /* Clinical profile summary block sitting above the visit timeline */
@@ -395,6 +398,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
    The exam page only shows a compact summary + button here; the
    actual upload UI (camera, file picker, grid) lives on its own
    page so the exam page stays uncluttered — see #doc-view-attachments. */
+.ps-edit-btn { flex-shrink:0; font-size:.78rem; padding:5px 10px; }
 .ps-attach-btn { flex-shrink:0; gap:4px; }
 .ps-attach-count { display:inline-flex; align-items:center; justify-content:center; min-width:19px; height:19px;
   padding:0 5px; border-radius:999px; background:rgba(255,255,255,.28); font-size:.75rem; font-weight:800; }
@@ -696,9 +700,10 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
     <section id="doc-view-chart" style="display:none;">
       <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري حالة من الدور، أو ابحثي عنها بالأعلى لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
-        <!-- Case-file header: name + basic data on one inline row, and
-             directly beneath it the معطيات grid (doctor-typed labels with
-             a value box each). The visit record starts below both. -->
+        <!-- Case-file header: the patient's basic data AND her البيانات
+             الأولية all read as one inline block (label + value pairs).
+             Editing happens in the modal opened by #c-profile-edit-btn,
+             so nothing here is a form. -->
         <div class="panel">
           <div class="patient-strip">
             <div class="ps-name" id="c-name">—</div>
@@ -710,16 +715,9 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <div class="ps-item"><span>فصيلة الدم</span><b id="c-blood">—</b></div>
             <div class="ps-item"><span>العنوان</span><b id="c-address">—</b></div>
             <div id="c-extra-fields"></div>
+            <div id="c-profile-fields"></div>
+            <button type="button" class="btn btn-ghost btn-sm ps-edit-btn" id="c-profile-edit-btn">✎ تعديل البيانات الأولية</button>
           </div>
-          <div class="metrics-head">
-            <h3>البيانات الأولية</h3>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <span class="cp-inline-msg" id="cp-inline-msg"></span>
-              <button type="button" class="btn btn-ghost btn-sm" id="cp-inline-add">+ إضافة معطى</button>
-              <button type="button" class="btn btn-primary btn-sm" id="cp-inline-save">حفظ البيانات الأولية</button>
-            </div>
-          </div>
-          <div id="cp-inline-list" class="cf-grid"></div>
         </div>
         <div class="grid-2">
           <div class="panel">
@@ -740,9 +738,9 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <input type="hidden" id="v-next-visit-note">
             <div class="field"><label>ملاحظات الكشف</label><textarea id="v-note" rows="6" placeholder="اكتبي ملاحظاتك بأي اختصارات معتادة عندك..."></textarea></div>
             <!-- The old "بيانات إضافية" rows are gone: the doctor now edits
-                 the patient's البيانات الأولية grid (#cp-inline-list) at the
-                 top of the case file, and a snapshot of it is stored with
-                 each visit record. -->
+                 the patient's البيانات الأولية (shown in the case-file header, edited
+                 from #c-profile-edit-btn), and a snapshot of it is stored
+                 with each visit record. -->
             <button class="btn btn-primary" id="v-complete-btn" style="margin-top:4px;">حفظ الكشف وإنهاء الزيارة</button>
           </div>
         </div>
@@ -3428,8 +3426,6 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("v-next-visit").value = "";
   document.getElementById("v-next-visit-note").value = "";
   refreshNextVisitSummary();
-  document.getElementById("cp-inline-msg").textContent = "";
-  inlineProfileLoadedFor = null;
   document.getElementById("vi-label").value = "سونار";
   document.getElementById("vi-amount").value = "0";
   document.getElementById("vi-discount-type").value = "none";
@@ -3439,13 +3435,11 @@ async function openPatientChart(patientId, queueId) {
   refreshExamInvoicePricing();
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
   currentClinicalProfile = null;
+  renderProfileStrip(null);
   unsubs.push(subscribePatientClinicalProfile(patientId, (data) => {
     currentClinicalProfile = data || null;
     renderClinicalProfile(currentClinicalProfile);
-    /* Fill the inline grid only the first time this chart's profile
-       arrives — later live updates must not overwrite what the doctor
-       is typing right now. */
-    if (inlineProfileLoadedFor !== patientId) loadInlineClinicalProfile(patientId, currentClinicalProfile);
+    renderProfileStrip(currentClinicalProfile);
   }));
 }
 
@@ -3525,7 +3519,7 @@ function resolveNextVisitStatus(nextVisitDate, allRows) {
 function renderClinicalProfile(data) {
   const box = document.getElementById("c-clinical-profile");
   /* The live, editable copy of this data now sits in the grid at the
-     top of the case file (#cp-inline-list), so this read-only block is
+     top of the case file (#c-profile-fields), so this read-only block is
      only kept for legacy chronic/medication text saved before the
      merge — nothing to draw when there is none. */
   if (!data || !(data.chronicConditions || data.ongoingMedications)) { box.innerHTML = ""; return; }
@@ -3749,6 +3743,9 @@ async function persistTemplateFields(listId) {
     template[label] = keepValue ? row.querySelector(".cf-value").value.trim() : "";
   });
   await savePinnedFields(PROFILE_FORM_KEY, template);
+  /* Keep the header strip in step with a renamed/added/deleted معطى. */
+  profileTemplateCache = null;
+  if (currentPatientId) renderProfileStrip(currentClinicalProfile);
 }
 /* Draws the grid as: every template معطى first (filled with this
    patient's saved value if there is one, otherwise the default), then
@@ -3778,38 +3775,32 @@ function wireTemplateAutoPersist(listId) {
   });
 }
 
-/* ---- The same بيانات أولية, edited inline on the exam page ----
-   #cp-inline-list sits right under the patient's header strip and is
-   bound to patients/{id}/clinicalProfile.customFields, sharing the
-   "cp" pinned-fields template with the modal above. A patient who has
-   nothing saved yet opens with the doctor's pinned template already
-   filled in, so recurring cases need editing, not re-typing. */
-let inlineProfileLoadedFor = null; // patientId the inline grid is currently showing — keeps the live subscription from wiping edits mid-typing
-async function loadInlineClinicalProfile(patientId, data) {
-  await populateProfileGrid("cp-inline-list", data && data.customFields);
-  inlineProfileLoadedFor = patientId;
-}
-async function saveInlineClinicalProfile(silent = false) {
-  if (!currentPatientId) return;
-  const msg = document.getElementById("cp-inline-msg");
-  const data = { customFields: readCustomFields("cp-inline-list") };
-  await persistTemplateFields("cp-inline-list");
-  try {
-    await saveClinicalProfile(currentPatientId, data);
-    if (!silent) { msg.textContent = "✓ تم الحفظ"; setTimeout(() => { msg.textContent = ""; }, 2500); }
-  } catch (err) {
-    console.error("تعذّر حفظ البيانات الأولية", err);
-    if (!silent) msg.textContent = "تعذّر الحفظ، حاولي تاني";
-  }
-}
-function wireInlineClinicalProfile() {
-  wireCustomFieldsWidget("cp-inline-list", "cp-inline-add");
-  wireTemplateAutoPersist("cp-inline-list");
-  document.getElementById("cp-inline-save").addEventListener("click", () => saveInlineClinicalProfile());
+/* ---- البيانات الأولية on the exam page: read-only, edited in a modal ----
+   The values are drawn straight into the patient's header block, so
+   they read as part of her data (اسم → قيمة) exactly like the phone
+   and address above them. #c-profile-edit-btn reopens the grid in the
+   modal; saving there updates this strip through the live
+   subscription, no reload needed. */
+let profileTemplateCache = null; // pinnedFields/cp, so the strip can list every معطى even before the patient has values
+async function renderProfileStrip(data) {
+  const box = document.getElementById("c-profile-fields");
+  if (!profileTemplateCache) profileTemplateCache = await loadPinnedFields(PROFILE_FORM_KEY);
+  const saved = { ...((data && data.customFields) || {}) };
+  const items = [];
+  Object.values(profileTemplateCache).forEach(entry => {
+    const value = Object.prototype.hasOwnProperty.call(saved, entry.label) ? saved[entry.label] : "";
+    delete saved[entry.label];
+    items.push([entry.label, value]);
+  });
+  Object.entries(saved).forEach(pair => items.push(pair));
+  box.innerHTML = items
+    .map(([k, v]) => `<div class="ps-item"><span>${k}</span><b>${v || "—"}</b></div>`).join("");
 }
 
 function wireExamPanel() {
-  wireInlineClinicalProfile();
+  document.getElementById("c-profile-edit-btn").addEventListener("click", () => {
+    openClinicalProfileModal("existing", currentClinicalProfile || {});
+  });
   wireExamInvoicePanel();
   wireExamInvoiceFab();
   wireNextVisitPanel();
@@ -3824,11 +3815,8 @@ function wireExamPanel() {
       /* Snapshot of the patient's بيانات أولية as they stand at this
          visit, so the timeline keeps a historical copy even after the
          doctor edits the live values later. */
-      customFields: readCustomFields("cp-inline-list")
+      customFields: { ...((currentClinicalProfile && currentClinicalProfile.customFields) || {}) }
     };
-    /* Any edit the doctor made to the البيانات الأولية grid during this
-       visit is persisted to the patient's file along with the visit. */
-    await saveInlineClinicalProfile(true);
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
     saveCustomFieldSuggestions(record.customFields);
     if (nextVisitDate) {
