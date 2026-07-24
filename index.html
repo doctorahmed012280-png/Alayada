@@ -383,6 +383,16 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 #cp-cf-list .cf-value { text-align:start; }
 #cp-cf-list .cf-pin-wrap input { width:17px; height:17px; }
 #cp-cf-list .cf-remove { padding:0 6px; font-size:1rem; }
+/* Per-معطى colouring: a swatch button on each edit row, and the small
+   picker modal it opens. */
+.cf-style-btn { flex:0 0 auto; width:24px; height:24px; border-radius:6px; border:1px solid var(--line);
+  background:#fff; cursor:pointer; font-weight:800; font-size:.8rem; line-height:1; padding:0; }
+.style-preview { border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; text-align:center;
+  font-weight:800; font-size:1.05rem; margin-bottom:14px; background:#fff; }
+.style-color-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.style-color-row input[type="color"] { width:52px; height:36px; padding:0; border:1px solid var(--line);
+  border-radius:var(--radius-sm); background:#fff; cursor:pointer; }
+.style-color-row label { flex:1; font-size:.9rem; }
 
 /* Clinical profile summary block sitting above the visit timeline */
 .clinical-profile-box { margin-bottom:16px; }
@@ -1044,6 +1054,40 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
       </div>
     </div>
 
+    <!-- ===== SHARED MODAL: colour + highlight for one معطى =====
+         Opened from the 🎨 swatch on any row of the البيانات الأولية grid.
+         "كل الحالات" writes the colour onto the clinic-wide template so
+         that معطى looks the same in every file; "الحالة دي بس" stores it
+         as an override on this patient's clinicalProfile.fieldStyles. -->
+    <div class="modal-overlay" id="modal-field-style">
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-field-style-title">
+        <div class="modal-box-header">
+          <h3 id="modal-field-style-title">لون المعطى</h3>
+          <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
+        </div>
+        <div class="style-preview" id="fs-preview">معاينة</div>
+        <div class="style-color-row">
+          <input type="checkbox" id="fs-color-on" style="width:auto;">
+          <label for="fs-color-on">لون الخط</label>
+          <input type="color" id="fs-color" value="#B3261E">
+        </div>
+        <div class="style-color-row">
+          <input type="checkbox" id="fs-hl-on" style="width:auto;">
+          <label for="fs-hl-on">هاي لايت (لون الخلفية)</label>
+          <input type="color" id="fs-hl" value="#FFF3A3">
+        </div>
+        <div class="field"><label for="fs-scope">يتطبّق على</label>
+          <select id="fs-scope">
+            <option value="one">الحالة دي بس</option>
+            <option value="all">كل الحالات (لون ثابت للمعطى)</option>
+          </select></div>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button type="button" class="btn btn-primary" id="fs-apply-btn" style="flex:1;justify-content:center;">تطبيق</button>
+          <button type="button" class="btn btn-ghost" id="fs-clear-btn">مسح التنسيق</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== Attachment image viewer — full-screen lightbox with prev/next
          navigation, opened from any patient-attachments grid (secretary's
          patient page or the doctor's case file) via openAttachmentImageViewer()
@@ -1307,6 +1351,16 @@ function customFieldsAddRow(listId, label = "", value = "", pinned = false) {
     pinWrap.title = "احفظ القيمة دي كقيمة افتراضية تظهر مع الحالات الجديدة (اسم المعطى نفسه محفوظ دائمًا)";
     pinWrap.insertAdjacentText("beforeend", "📌");
     row.querySelector(".cf-remove").textContent = "✕";
+    if (wrap.id === "cp-cf-list") {
+      const styleBtn = document.createElement("button");
+      styleBtn.type = "button";
+      styleBtn.className = "cf-style-btn";
+      styleBtn.textContent = "A";
+      styleBtn.title = "لون المعطى والهاي لايت";
+      styleBtn.addEventListener("click", () => openFieldStyleModal(row));
+      row.insertBefore(styleBtn, pinWrap);
+      paintStyleSwatch(row);
+    }
   }
   row.querySelector(".cf-remove").addEventListener("click", () => row.remove());
   wireCustomFieldSuggestionDropdowns(row, labelInput, valueInput);
@@ -1325,10 +1379,31 @@ function readCustomFields(listId) {
   return data;
 }
 function clearCustomFields(listId) { document.getElementById(listId).innerHTML = ""; }
-function renderCustomFieldsView(data) {
+/* ---- Colour/highlight per معطى ----
+   Two layers: a clinic-wide colour stored on the معطى's template entry
+   (so e.g. DM is red in every file), and an optional per-patient
+   override on clinicalProfile.fieldStyles (so one case can be flagged
+   without touching the rest). resolveFieldStyle() merges them. */
+let fieldStyleTemplate = {}; // label -> { color, highlight }, from the البيانات الأولية template
+function resolveFieldStyle(label, overrides) {
+  const tpl = (fieldStyleTemplate && fieldStyleTemplate[label]) || null;
+  const own = (overrides && overrides[label]) || null;
+  const st = { ...(tpl || {}), ...(own || {}) };
+  return (st.color || st.highlight) ? st : null;
+}
+function fieldStyleAttr(label, overrides) {
+  const st = resolveFieldStyle(label, overrides);
+  if (!st) return "";
+  const parts = [];
+  if (st.color) parts.push(`color:${st.color}`);
+  if (st.highlight) parts.push(`background:${st.highlight}`, "padding:1px 6px", "border-radius:6px");
+  return ` style="${parts.join(";")}"`;
+}
+function renderCustomFieldsView(data, overrides) {
   if (!data || !Object.keys(data).length) return "";
   return `<div style="margin-top:6px;font-size:.82rem;color:var(--ink-soft);">` +
-    Object.entries(data).map(([k, v]) => `<div>· <strong>${k}:</strong> ${v}</div>`).join("") +
+    Object.entries(data).map(([k, v]) =>
+      `<div><span${fieldStyleAttr(k, overrides)}>· <strong>${k}:</strong> ${v}</span></div>`).join("") +
     `</div>`;
 }
 
@@ -1362,9 +1437,14 @@ async function loadPinnedFields(formKey) {
 }
 async function savePinnedFields(formKey, labelValueMap) {
   const data = {};
-  Object.entries(labelValueMap).forEach(([label, value]) => {
+  Object.entries(labelValueMap).forEach(([label, entry]) => {
     const key = slugifyFieldKey(label);
-    if (key) data[key] = { label, value };
+    if (!key) return;
+    /* entry is either a plain default value (other forms) or
+       { value, color, highlight } for the البيانات الأولية template. */
+    data[key] = (entry && typeof entry === "object")
+      ? { label, value: entry.value || "", ...(entry.color ? { color: entry.color } : {}), ...(entry.highlight ? { highlight: entry.highlight } : {}) }
+      : { label, value: entry };
   });
   try { await set(ref(db, t(`pinnedFields/${formKey}`)), data); }
   catch (err) { console.error("تعذّر حفظ الحقول المثبّتة", err); }
@@ -3442,7 +3522,7 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("c-address").textContent = displayAddress(patient);
   const extraEntries = Object.entries(patient.customFields || {}).filter(([, v]) => v);
   document.getElementById("c-extra-fields").innerHTML = extraEntries
-    .map(([k, v]) => `<div class="ps-item"><span>${k}</span><b>${v}</b></div>`).join("");
+    .map(([k, v]) => `<div class="ps-item"${fieldStyleAttr(k, null)}><span>${k}</span><b>${v}</b></div>`).join("");
 
   unsubs.push(wireAttachmentsNavCard(patientId));
 
@@ -3571,7 +3651,7 @@ function renderTimeline(rows) {
           ${r.ultrasoundFindings ? `سونار: ${r.ultrasoundFindings}<br>` : ""}
           ${r.prescription ? `روشتة: ${r.prescription}` : ""}` : ""}
       </div>
-      ${renderCustomFieldsView(r.customFields)}`;
+      ${renderCustomFieldsView(r.customFields, currentClinicalProfile && currentClinicalProfile.fieldStyles)}`;
     list.appendChild(li);
   });
 }
@@ -3717,12 +3797,13 @@ function refreshPendingClinicalProfileSummary() {
 async function openClinicalProfileModal(mode, data) {
   clinicalProfileModalMode = mode;
   document.getElementById("cp-error").textContent = "";
-  await populateProfileGrid("cp-cf-list", data.customFields);
+  await populateProfileGrid("cp-cf-list", data.customFields, data.fieldStyles);
   openModal("modal-clinical-profile");
 }
 function wireClinicalProfilePanel() {
   wireCustomFieldsWidget("cp-cf-list", "cp-cf-add");
   wireTemplateAutoPersist("cp-cf-list");
+  wireFieldStyleModal();
   const errorEl = document.getElementById("cp-error");
 
   document.getElementById("np-clinical-profile-btn").addEventListener("click", () => {
@@ -3731,7 +3812,7 @@ function wireClinicalProfilePanel() {
 
   document.getElementById("cp-save-btn").addEventListener("click", async () => {
     errorEl.textContent = "";
-    const data = { customFields: readCustomFields("cp-cf-list") };
+    const data = { customFields: readCustomFields("cp-cf-list"), fieldStyles: readFieldStyles("cp-cf-list") };
     await persistTemplateFields("cp-cf-list");
     if (clinicalProfileModalMode === "pending") {
       pendingClinicalProfileDraft = Object.keys(data.customFields).length ? data : null;
@@ -3764,7 +3845,11 @@ async function persistTemplateFields(listId) {
     const label = row.querySelector(".cf-label").value.trim();
     if (!label) return;
     const keepValue = row.querySelector(".cf-pin")?.checked;
-    template[label] = keepValue ? row.querySelector(".cf-value").value.trim() : "";
+    template[label] = {
+      value: keepValue ? row.querySelector(".cf-value").value.trim() : "",
+      color: row.dataset.tplColor || "",
+      highlight: row.dataset.tplHighlight || ""
+    };
   });
   await savePinnedFields(PROFILE_FORM_KEY, template);
   /* Keep the header strip in step with a renamed/added/deleted معطى. */
@@ -3774,17 +3859,31 @@ async function persistTemplateFields(listId) {
 /* Draws the grid as: every template معطى first (filled with this
    patient's saved value if there is one, otherwise the default), then
    anything extra that was saved for this patient only. */
-async function populateProfileGrid(listId, savedFields) {
+async function populateProfileGrid(listId, savedFields, styleOverrides) {
   clearCustomFields(listId);
   const saved = { ...(savedFields || {}) };
+  const overrides = { ...(styleOverrides || {}) };
   const template = await loadPinnedFields(PROFILE_FORM_KEY);
+  profileTemplateCache = template; rebuildFieldStyleTemplate();
+  const addRow = (label, value, pinned, tpl) => {
+    customFieldsAddRow(listId, label, value, pinned);
+    const row = document.getElementById(listId).lastElementChild;
+    const own = overrides[label];
+    row.dataset.tplColor = (tpl && tpl.color) || "";
+    row.dataset.tplHighlight = (tpl && tpl.highlight) || "";
+    row.dataset.override = own ? "1" : "";
+    row.dataset.color = own ? (own.color || "") : row.dataset.tplColor;
+    row.dataset.highlight = own ? (own.highlight || "") : row.dataset.tplHighlight;
+    paintStyleSwatch(row);
+  };
   Object.values(template).forEach(entry => {
     const hasSaved = Object.prototype.hasOwnProperty.call(saved, entry.label);
     const value = hasSaved ? saved[entry.label] : (entry.value || "");
     delete saved[entry.label];
-    customFieldsAddRow(listId, entry.label, value, !!entry.value);
+    delete overrides[entry.label + "\u0000"]; // no-op guard, keeps overrides keyed by label
+    addRow(entry.label, value, !!entry.value, entry);
   });
-  Object.entries(saved).forEach(([label, value]) => customFieldsAddRow(listId, label, value, false));
+  Object.entries(saved).forEach(([label, value]) => addRow(label, value, false, null));
 }
 /* Keeps the template in step with the grid as it's edited, without
    waiting for a save: renaming, adding or deleting a معطى updates the
@@ -3806,9 +3905,94 @@ function wireTemplateAutoPersist(listId) {
    modal; saving there updates this strip through the live
    subscription, no reload needed. */
 let profileTemplateCache = null; // pinnedFields/cp, so the strip can list every معطى even before the patient has values
+function rebuildFieldStyleTemplate() {
+  fieldStyleTemplate = {};
+  Object.values(profileTemplateCache || {}).forEach(entry => {
+    if (entry.color || entry.highlight) fieldStyleTemplate[entry.label] = { color: entry.color || "", highlight: entry.highlight || "" };
+  });
+}
+/* Draws the row's 🎨 button using whatever colours that row currently
+   carries, so the grid itself shows the formatting at a glance. */
+function paintStyleSwatch(row) {
+  const btn = row.querySelector(".cf-style-btn");
+  if (!btn) return;
+  const { color, highlight } = row.dataset;
+  btn.style.color = color || "var(--ink-soft)";
+  btn.style.background = highlight || "#fff";
+  btn.style.borderColor = (color || highlight) ? (color || highlight) : "var(--line)";
+}
+function setRowStyle(row, { color, highlight, scope }) {
+  row.dataset.color = color || "";
+  row.dataset.highlight = highlight || "";
+  if (scope === "all") {
+    row.dataset.tplColor = color || "";
+    row.dataset.tplHighlight = highlight || "";
+    row.dataset.override = "";
+  } else {
+    row.dataset.override = (color || highlight) ? "1" : "";
+  }
+  paintStyleSwatch(row);
+}
+let styleTargetRow = null;
+function openFieldStyleModal(row) {
+  styleTargetRow = row;
+  const colorOn = document.getElementById("fs-color-on");
+  const hlOn = document.getElementById("fs-hl-on");
+  const colorInput = document.getElementById("fs-color");
+  const hlInput = document.getElementById("fs-hl");
+  colorOn.checked = !!row.dataset.color;
+  hlOn.checked = !!row.dataset.highlight;
+  if (row.dataset.color) colorInput.value = row.dataset.color;
+  if (row.dataset.highlight) hlInput.value = row.dataset.highlight;
+  document.getElementById("fs-scope").value = row.dataset.override === "1" ? "one" : "all";
+  document.getElementById("modal-field-style-title").textContent =
+    `لون: ${row.querySelector(".cf-label").value.trim() || "المعطى"}`;
+  refreshStylePreview();
+  openModal("modal-field-style");
+}
+function refreshStylePreview() {
+  const preview = document.getElementById("fs-preview");
+  const color = document.getElementById("fs-color-on").checked ? document.getElementById("fs-color").value : "";
+  const highlight = document.getElementById("fs-hl-on").checked ? document.getElementById("fs-hl").value : "";
+  const label = styleTargetRow ? (styleTargetRow.querySelector(".cf-label").value.trim() || "معطى") : "معاينة";
+  const value = styleTargetRow ? (styleTargetRow.querySelector(".cf-value").value.trim() || "قيمة") : "";
+  preview.textContent = `${label} ${value}`.trim();
+  preview.style.color = color || "var(--ink)";
+  preview.style.background = highlight || "#fff";
+}
+function wireFieldStyleModal() {
+  ["fs-color-on", "fs-hl-on", "fs-color", "fs-hl"].forEach(id =>
+    document.getElementById(id).addEventListener("input", refreshStylePreview));
+  document.getElementById("fs-apply-btn").addEventListener("click", () => {
+    if (!styleTargetRow) return;
+    setRowStyle(styleTargetRow, {
+      color: document.getElementById("fs-color-on").checked ? document.getElementById("fs-color").value : "",
+      highlight: document.getElementById("fs-hl-on").checked ? document.getElementById("fs-hl").value : "",
+      scope: document.getElementById("fs-scope").value
+    });
+    closeModal("modal-field-style");
+  });
+  document.getElementById("fs-clear-btn").addEventListener("click", () => {
+    if (!styleTargetRow) return;
+    setRowStyle(styleTargetRow, { color: "", highlight: "", scope: document.getElementById("fs-scope").value });
+    closeModal("modal-field-style");
+  });
+}
+/* The per-patient overrides currently held by the grid rows. */
+function readFieldStyles(listId) {
+  const out = {};
+  document.querySelectorAll(`#${listId} .custom-field-row`).forEach(row => {
+    const label = row.querySelector(".cf-label").value.trim();
+    if (!label || row.dataset.override !== "1") return;
+    if (!row.dataset.color && !row.dataset.highlight) return;
+    out[label] = { color: row.dataset.color || "", highlight: row.dataset.highlight || "" };
+  });
+  return out;
+}
 async function renderProfileStrip(data) {
   const box = document.getElementById("c-profile-fields");
-  if (!profileTemplateCache) profileTemplateCache = await loadPinnedFields(PROFILE_FORM_KEY);
+  if (!profileTemplateCache) { profileTemplateCache = await loadPinnedFields(PROFILE_FORM_KEY); rebuildFieldStyleTemplate(); }
+  const overrides = (data && data.fieldStyles) || null;
   const saved = { ...((data && data.customFields) || {}) };
   const items = [];
   Object.values(profileTemplateCache).forEach(entry => {
@@ -3818,7 +4002,7 @@ async function renderProfileStrip(data) {
   });
   Object.entries(saved).forEach(pair => items.push(pair));
   box.innerHTML = items
-    .map(([k, v]) => `<div class="ps-item"><span>${k}</span><b>${v || "—"}</b></div>`).join("");
+    .map(([k, v]) => `<div class="ps-item"${fieldStyleAttr(k, overrides)}><span>${k}</span><b>${v || "—"}</b></div>`).join("");
 }
 
 function wireExamPanel() {
