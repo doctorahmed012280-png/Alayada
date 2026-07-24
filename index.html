@@ -4019,14 +4019,13 @@ function wireExamPanel() {
     const nextVisitNote = document.getElementById("v-next-visit-note").value.trim() || null;
     const record = {
       note: document.getElementById("v-note").value.trim(),
-      nextVisitDate, nextVisitNote,
-      /* Snapshot of the patient's بيانات أولية as they stand at this
-         visit, so the timeline keeps a historical copy even after the
-         doctor edits the live values later. */
-      customFields: { ...((currentClinicalProfile && currentClinicalProfile.customFields) || {}) }
+      nextVisitDate, nextVisitNote
+      /* No snapshot of البيانات الأولية here: it belongs to the patient's
+         file (shown once in the header), not to every visit — copying it
+         into each timeline entry just repeated the same block over and
+         over. */
     };
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
-    saveCustomFieldSuggestions(record.customFields);
     if (nextVisitDate) {
       await bookAppointment(nextVisitDate, {
         patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid,
