@@ -710,7 +710,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
               <button type="button" class="btn btn-ghost btn-sm" id="cp-inline-add">+ إضافة معطى</button>
               <button type="button" class="btn btn-primary btn-sm" id="cp-inline-save">حفظ البيانات الأولية</button>
             </div>
-            <p class="metrics-hint">دي بيانات المريضة الثابتة — بتتحفظ على الملف نفسه وتقدري تعدّلي عليها أو تمسحيها في أي كشف بعد كده. علّمي 📌 على المعطيات اللي بتتكرر مع كل الحالات عشان تلاقيها جاهزة تلقائيًا في أي ملف جديد.</p>
+            <p class="metrics-hint">أي معطى بتضيفيه هنا بيتحفظ دائمًا وبيظهر مع كل الحالات — القديمة والجديدة — لحد ما تمسحيه من هنا بنفسك. القيم نفسها خاصة بكل مريضة، وعلامة 📌 معناها إن القيمة دي تبقى القيمة الافتراضية اللي تفتح بيها الحالات الجديدة.</p>
           </div>
           <div id="cp-inline-list" class="cf-grid"></div>
         </div>
@@ -1015,7 +1015,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
           <h3 id="modal-clinical-profile-title">البيانات الأولية</h3>
           <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
         </div>
-        <p class="metrics-hint" style="margin:0 0 12px;">اكتبي اسم المعطى وقيمته جنبه. علّمي 📌 على أي معطى بيتكرر مع كل الحالات عشان يظهر جاهز تلقائيًا في كل ملف جديد، والدكتور يعدّل عليه أو يمسحه من صفحة الكشف.</p>
+        <p class="metrics-hint" style="margin:0 0 12px;">المعطيات اللي هنا محفوظة دائمًا وبتظهر مع كل حالة لحد ما تتمسح من هنا. القيمة اللي عليها 📌 بتبقى القيمة الافتراضية للحالات الجديدة، والدكتور يقدر يعدّلها من صفحة الكشف.</p>
         <div id="cp-cf-list" class="cf-grid"></div>
         <button type="button" class="btn btn-ghost btn-sm" id="cp-cf-add" style="margin:12px 0;">+ إضافة معطى</button>
         <div class="error-msg" id="cp-error"></div>
@@ -1284,7 +1284,9 @@ function customFieldsAddRow(listId, label = "", value = "", pinned = false) {
   if (wrap.classList.contains("cf-grid")) {
     labelInput.placeholder = "اسم المعطى";
     valueInput.placeholder = "القيمة";
-    row.querySelector(".cf-pin-wrap").insertAdjacentText("beforeend", "📌");
+    const pinWrap = row.querySelector(".cf-pin-wrap");
+    pinWrap.title = "احفظ القيمة دي كقيمة افتراضية تظهر مع الحالات الجديدة (اسم المعطى نفسه محفوظ دائمًا)";
+    pinWrap.insertAdjacentText("beforeend", "📌");
     row.querySelector(".cf-remove").textContent = "✕";
   }
   row.querySelector(".cf-remove").addEventListener("click", () => row.remove());
@@ -3697,14 +3699,12 @@ function refreshPendingClinicalProfileSummary() {
 async function openClinicalProfileModal(mode, data) {
   clinicalProfileModalMode = mode;
   document.getElementById("cp-error").textContent = "";
-  clearCustomFields("cp-cf-list");
-  const existingEntries = Object.entries(data.customFields || {});
-  if (existingEntries.length) existingEntries.forEach(([label, value]) => customFieldsAddRow("cp-cf-list", label, value));
-  else await populatePinnedFieldRows("cp-cf-list", "cp");
+  await populateProfileGrid("cp-cf-list", data.customFields);
   openModal("modal-clinical-profile");
 }
 function wireClinicalProfilePanel() {
   wireCustomFieldsWidget("cp-cf-list", "cp-cf-add");
+  wireTemplateAutoPersist("cp-cf-list");
   const errorEl = document.getElementById("cp-error");
 
   document.getElementById("np-clinical-profile-btn").addEventListener("click", () => {
@@ -3714,7 +3714,7 @@ function wireClinicalProfilePanel() {
   document.getElementById("cp-save-btn").addEventListener("click", async () => {
     errorEl.textContent = "";
     const data = { customFields: readCustomFields("cp-cf-list") };
-    await persistPinnedFields("cp-cf-list", "cp");
+    await persistTemplateFields("cp-cf-list");
     if (clinicalProfileModalMode === "pending") {
       pendingClinicalProfileDraft = Object.keys(data.customFields).length ? data : null;
       refreshPendingClinicalProfileSummary();
@@ -3732,6 +3732,52 @@ function wireClinicalProfilePanel() {
   });
 }
 
+/* ---- The البيانات الأولية template ----
+   Every معطى the doctor creates in البيانات الأولية is remembered for the
+   whole clinic (pinnedFields/cp) the moment it's typed, and comes back
+   on EVERY patient — new or old — until someone deletes that row. The
+   📌 tick is now only about the VALUE: tick it and the value you typed
+   becomes the default that new cases open with; leave it unticked and
+   the معطى shows up empty, ready to be filled per case. */
+const PROFILE_FORM_KEY = "cp";
+async function persistTemplateFields(listId) {
+  const template = {};
+  document.querySelectorAll(`#${listId} .custom-field-row`).forEach(row => {
+    const label = row.querySelector(".cf-label").value.trim();
+    if (!label) return;
+    const keepValue = row.querySelector(".cf-pin")?.checked;
+    template[label] = keepValue ? row.querySelector(".cf-value").value.trim() : "";
+  });
+  await savePinnedFields(PROFILE_FORM_KEY, template);
+}
+/* Draws the grid as: every template معطى first (filled with this
+   patient's saved value if there is one, otherwise the default), then
+   anything extra that was saved for this patient only. */
+async function populateProfileGrid(listId, savedFields) {
+  clearCustomFields(listId);
+  const saved = { ...(savedFields || {}) };
+  const template = await loadPinnedFields(PROFILE_FORM_KEY);
+  Object.values(template).forEach(entry => {
+    const hasSaved = Object.prototype.hasOwnProperty.call(saved, entry.label);
+    const value = hasSaved ? saved[entry.label] : (entry.value || "");
+    delete saved[entry.label];
+    customFieldsAddRow(listId, entry.label, value, !!entry.value);
+  });
+  Object.entries(saved).forEach(([label, value]) => customFieldsAddRow(listId, label, value, false));
+}
+/* Keeps the template in step with the grid as it's edited, without
+   waiting for a save: renaming, adding or deleting a معطى updates the
+   clinic-wide list right away. */
+function wireTemplateAutoPersist(listId) {
+  const wrap = document.getElementById(listId);
+  wrap.addEventListener("change", (e) => {
+    if (e.target.matches(".cf-label, .cf-pin, .cf-value")) persistTemplateFields(listId);
+  });
+  wrap.addEventListener("click", (e) => {
+    if (e.target.closest(".cf-remove")) setTimeout(() => persistTemplateFields(listId), 0);
+  });
+}
+
 /* ---- The same بيانات أولية, edited inline on the exam page ----
    #cp-inline-list sits right under the patient's header strip and is
    bound to patients/{id}/clinicalProfile.customFields, sharing the
@@ -3740,17 +3786,14 @@ function wireClinicalProfilePanel() {
    filled in, so recurring cases need editing, not re-typing. */
 let inlineProfileLoadedFor = null; // patientId the inline grid is currently showing — keeps the live subscription from wiping edits mid-typing
 async function loadInlineClinicalProfile(patientId, data) {
-  clearCustomFields("cp-inline-list");
-  const entries = Object.entries((data && data.customFields) || {});
-  if (entries.length) entries.forEach(([label, value]) => customFieldsAddRow("cp-inline-list", label, value));
-  else await populatePinnedFieldRows("cp-inline-list", "cp");
+  await populateProfileGrid("cp-inline-list", data && data.customFields);
   inlineProfileLoadedFor = patientId;
 }
 async function saveInlineClinicalProfile(silent = false) {
   if (!currentPatientId) return;
   const msg = document.getElementById("cp-inline-msg");
   const data = { customFields: readCustomFields("cp-inline-list") };
-  await persistPinnedFields("cp-inline-list", "cp");
+  await persistTemplateFields("cp-inline-list");
   try {
     await saveClinicalProfile(currentPatientId, data);
     if (!silent) { msg.textContent = "✓ تم الحفظ"; setTimeout(() => { msg.textContent = ""; }, 2500); }
@@ -3761,6 +3804,7 @@ async function saveInlineClinicalProfile(silent = false) {
 }
 function wireInlineClinicalProfile() {
   wireCustomFieldsWidget("cp-inline-list", "cp-inline-add");
+  wireTemplateAutoPersist("cp-inline-list");
   document.getElementById("cp-inline-save").addEventListener("click", () => saveInlineClinicalProfile());
 }
 
