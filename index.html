@@ -306,6 +306,52 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .info-table tr:last-child th, .info-table tr:last-child td { border-bottom:none; }
 .info-table .name-cell { font-family:'Cairo',sans-serif; font-weight:800; font-size:1.1rem; color:var(--primary-d); }
 
+/* ---- Case-file header strip ----
+   The patient's name + basic data sit on ONE inline row at the very
+   top of the case file (instead of the old vertical table), so the
+   screen underneath is free for the معطيات grid and then the visit
+   record — the layout the doctor sketched. Items wrap naturally on
+   narrow screens. */
+.patient-strip { display:flex; flex-wrap:wrap; align-items:center; gap:10px 22px; }
+.patient-strip .ps-name {
+  font-family:'Cairo',sans-serif; font-weight:800; font-size:1.25rem; color:var(--primary-d);
+  padding-inline-end:22px; border-inline-end:2px solid var(--line); line-height:1.3;
+}
+.patient-strip .ps-item { display:flex; align-items:baseline; gap:6px; font-size:.92rem; min-width:0; }
+.patient-strip .ps-item > span { color:var(--ink-soft); font-size:.8rem; font-weight:600; white-space:nowrap; }
+.patient-strip .ps-item > b { font-weight:700; word-break:break-word; }
+#c-extra-fields { display:contents; }
+@media (max-width:620px) {
+  .patient-strip .ps-name { width:100%; border-inline-end:none; padding-inline-end:0;
+    border-bottom:1px solid var(--line); padding-bottom:8px; }
+}
+
+/* ---- معطيات الكشف: doctor-defined label→value grid ----
+   Same reusable custom-fields widget used elsewhere, but when its
+   container carries .cf-grid the rows are laid out as compact cards
+   in a responsive grid (اسم المعطى ← قيمته), matching the paper form.
+   Deliberately starts EMPTY: every label is typed by the doctor, and
+   ticking "تثبيت" makes that معطى come back pre-filled next time. */
+.metrics-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
+  margin:18px 0 12px; padding-top:16px; border-top:1px dashed var(--line); }
+.metrics-head h3 { margin:0; }
+.metrics-hint { width:100%; margin:0; color:var(--ink-soft); font-size:.8rem; }
+.cf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px; }
+.cf-grid .custom-field-row {
+  display:flex !important; flex-wrap:nowrap; align-items:center; gap:6px !important;
+  background:#FBF9F4; border:1px solid var(--line); border-radius:var(--radius-sm); padding:7px 9px; margin:0;
+}
+.cf-grid .custom-field-row .field { margin-bottom:0; gap:0; }
+.cf-grid .custom-field-row .field label { display:none; }
+.cf-grid .cf-label, .cf-grid .cf-value { padding:7px 9px; font-size:.9rem; background:#fff; }
+.cf-grid .custom-field-input-wrap:first-of-type { flex:1 1 55%; }
+.cf-grid .custom-field-input-wrap:nth-of-type(2) { flex:1 1 45%; }
+.cf-grid .cf-value { font-weight:700; text-align:center; }
+.cf-grid .cf-pin-wrap { padding-bottom:0; }
+.cf-grid .cf-pin-wrap span { display:none; }
+.cf-grid .cf-remove { padding:4px 8px; font-size:.78rem; border:none; color:var(--st-cancelled); }
+.cf-grid:empty { display:none; }
+
 /* Clinical profile summary block sitting above the visit timeline */
 .clinical-profile-box { margin-bottom:16px; }
 .clinical-profile-box .empty-state { padding:16px 10px; }
@@ -641,17 +687,24 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
     <section id="doc-view-chart" style="display:none;">
       <div id="chart-empty" class="panel empty-state"><div class="icon">🩺</div>اختاري حالة من الدور، أو ابحثي عنها بالأعلى لفتح ملفها</div>
       <div id="chart-content" style="display:none;">
+        <!-- Case-file header: name + basic data on one inline row, and
+             directly beneath it the معطيات grid (doctor-typed labels with
+             a value box each). The visit record starts below both. -->
         <div class="panel">
-          <table class="info-table">
-            <tbody>
-              <tr><th>الاسم</th><td class="name-cell" id="c-name">—</td></tr>
-              <tr><th>الهاتف</th><td class="mono" id="c-phone">—</td></tr>
-              <tr><th>العمر</th><td id="c-age">—</td></tr>
-              <tr><th>فصيلة الدم</th><td id="c-blood">—</td></tr>
-              <tr><th>العنوان</th><td id="c-address">—</td></tr>
-            </tbody>
-            <tbody id="c-extra-fields"></tbody>
-          </table>
+          <div class="patient-strip">
+            <div class="ps-name" id="c-name">—</div>
+            <div class="ps-item"><span>الهاتف</span><b class="mono" id="c-phone">—</b></div>
+            <div class="ps-item"><span>العمر</span><b id="c-age">—</b></div>
+            <div class="ps-item"><span>فصيلة الدم</span><b id="c-blood">—</b></div>
+            <div class="ps-item"><span>العنوان</span><b id="c-address">—</b></div>
+            <div id="c-extra-fields"></div>
+          </div>
+          <div class="metrics-head">
+            <h3>معطيات الكشف</h3>
+            <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add">+ إضافة معطى</button>
+            <p class="metrics-hint">اكتبي اسم المعطى في الخانة الأولى وقيمته في الخانة اللي جنبها. علّمي على 📌 عشان المعطى ده يرجع جاهز في كل كشف جديد.</p>
+          </div>
+          <div id="v-cf-list" class="cf-grid"></div>
         </div>
         <div class="panel attachments-nav-card">
           <div class="attachments-nav-info">
@@ -684,10 +737,9 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <input type="hidden" id="v-next-visit">
             <input type="hidden" id="v-next-visit-note">
             <div class="field"><label>ملاحظات الكشف</label><textarea id="v-note" rows="6" placeholder="اكتبي ملاحظاتك بأي اختصارات معتادة عندك..."></textarea></div>
-            <div class="field"><label>بيانات إضافية (اختياري)</label></div>
-            <div id="v-cf-list"></div>
-            <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
-            <button class="btn btn-primary" id="v-complete-btn">حفظ الكشف وإنهاء الزيارة</button>
+            <!-- "بيانات إضافية" moved up to the case-file header as the
+                 معطيات grid (#v-cf-list) — same IDs, same save path. -->
+            <button class="btn btn-primary" id="v-complete-btn" style="margin-top:4px;">حفظ الكشف وإنهاء الزيارة</button>
           </div>
         </div>
       </div>
@@ -1223,6 +1275,15 @@ function customFieldsAddRow(listId, label = "", value = "", pinned = false) {
   const valueInput = row.querySelector(".cf-value");
   labelInput.value = label;
   valueInput.value = value;
+  /* Grid mode (the معطيات block on the exam page): the per-input
+     labels are hidden by CSS to keep each card compact, so the hints
+     move into placeholders and the pin gets an icon instead of text. */
+  if (wrap.classList.contains("cf-grid")) {
+    labelInput.placeholder = "اسم المعطى";
+    valueInput.placeholder = "القيمة";
+    row.querySelector(".cf-pin-wrap").insertAdjacentText("beforeend", "📌");
+    row.querySelector(".cf-remove").textContent = "✕";
+  }
   row.querySelector(".cf-remove").addEventListener("click", () => row.remove());
   wireCustomFieldSuggestionDropdowns(row, labelInput, valueInput);
   wrap.appendChild(row);
@@ -3356,7 +3417,8 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("c-blood").textContent = patient.bloodType ?? "—";
   document.getElementById("c-address").textContent = displayAddress(patient);
   const extraEntries = Object.entries(patient.customFields || {}).filter(([, v]) => v);
-  document.getElementById("c-extra-fields").innerHTML = extraEntries.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("");
+  document.getElementById("c-extra-fields").innerHTML = extraEntries
+    .map(([k, v]) => `<div class="ps-item"><span>${k}</span><b>${v}</b></div>`).join("");
 
   unsubs.push(wireAttachmentsNavCard(patientId));
 
