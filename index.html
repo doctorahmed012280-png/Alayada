@@ -335,6 +335,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .metrics-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;
   margin:18px 0 12px; padding-top:16px; border-top:1px dashed var(--line); }
 .metrics-head h3 { margin:0; }
+.cp-inline-msg { font-size:.82rem; color:var(--st-done); font-weight:700; }
 .metrics-hint { width:100%; margin:0; color:var(--ink-soft); font-size:.8rem; }
 .cf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px; }
 @media (min-width:1250px) { .cf-grid { grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); } }
@@ -703,11 +704,15 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <div id="c-extra-fields"></div>
           </div>
           <div class="metrics-head">
-            <h3>معطيات الكشف</h3>
-            <button type="button" class="btn btn-ghost btn-sm" id="v-cf-add">+ إضافة معطى</button>
-            <p class="metrics-hint">اكتبي اسم المعطى في الخانة الأولى وقيمته في الخانة اللي جنبها. علّمي على 📌 عشان المعطى ده يرجع جاهز في كل كشف جديد.</p>
+            <h3>البيانات الأولية</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <span class="cp-inline-msg" id="cp-inline-msg"></span>
+              <button type="button" class="btn btn-ghost btn-sm" id="cp-inline-add">+ إضافة معطى</button>
+              <button type="button" class="btn btn-primary btn-sm" id="cp-inline-save">حفظ البيانات الأولية</button>
+            </div>
+            <p class="metrics-hint">دي بيانات المريضة الثابتة — بتتحفظ على الملف نفسه وتقدري تعدّلي عليها أو تمسحيها في أي كشف بعد كده. علّمي 📌 على المعطيات اللي بتتكرر مع كل الحالات عشان تلاقيها جاهزة تلقائيًا في أي ملف جديد.</p>
           </div>
-          <div id="v-cf-list" class="cf-grid"></div>
+          <div id="cp-inline-list" class="cf-grid"></div>
         </div>
         <div class="panel attachments-nav-card">
           <div class="attachments-nav-info">
@@ -729,9 +734,6 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:2px;">
               <h3 style="margin:0;">كشف جديد</h3>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <button type="button" class="btn btn-ghost btn-sm" id="v-clinical-profile-btn">
-                  <span id="v-clinical-profile-summary">+ بيانات أولية / أمراض مزمنة</span>
-                </button>
                 <button type="button" class="btn btn-ghost btn-sm" id="v-next-visit-btn">
                   <span id="v-next-visit-summary">+ موعد الزيارة القادمة</span>
                 </button>
@@ -740,8 +742,10 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             <input type="hidden" id="v-next-visit">
             <input type="hidden" id="v-next-visit-note">
             <div class="field"><label>ملاحظات الكشف</label><textarea id="v-note" rows="6" placeholder="اكتبي ملاحظاتك بأي اختصارات معتادة عندك..."></textarea></div>
-            <!-- "بيانات إضافية" moved up to the case-file header as the
-                 معطيات grid (#v-cf-list) — same IDs, same save path. -->
+            <!-- The old "بيانات إضافية" rows are gone: the doctor now edits
+                 the patient's البيانات الأولية grid (#cp-inline-list) at the
+                 top of the case file, and a snapshot of it is stored with
+                 each visit record. -->
             <button class="btn btn-primary" id="v-complete-btn" style="margin-top:4px;">حفظ الكشف وإنهاء الزيارة</button>
           </div>
         </div>
@@ -987,7 +991,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
         </div>
         <div class="field"><label>الشارع/تفاصيل العنوان (اختياري)</label><input id="np-street" placeholder="اسم الشارع ورقم العقار"></div>
         <button type="button" class="btn btn-ghost btn-sm" id="np-clinical-profile-btn" style="margin-bottom:14px;">
-          <span id="np-clinical-profile-summary">+ بيانات أولية / أمراض مزمنة</span>
+          <span id="np-clinical-profile-summary">+ البيانات الأولية</span>
         </button>
         <div class="field"><label>بيانات إضافية (اختياري)</label></div>
         <div id="np-cf-list"></div>
@@ -1000,8 +1004,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
     <!-- ===== SHARED MODAL: fixed, replace-not-accumulate patient info
          (chronic conditions / ongoing medications), stored separately
          from the visits list at patients/{patientId}/clinicalProfile.
-         Used both from the doctor's exam page (v-clinical-profile-btn,
-         for an existing patient) and from the new-patient form above
+         Used from the new-patient form above
          (np-clinical-profile-btn, staged in pendingClinicalProfileDraft
          until the patient is actually created) — kept outside any
          role-specific <section> so it renders regardless of which page
@@ -1009,15 +1012,12 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
     <div class="modal-overlay" id="modal-clinical-profile">
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-clinical-profile-title">
         <div class="modal-box-header">
-          <h3 id="modal-clinical-profile-title">بيانات أولية / أمراض مزمنة</h3>
+          <h3 id="modal-clinical-profile-title">البيانات الأولية</h3>
           <button type="button" class="modal-close-btn" aria-label="إغلاق">✕</button>
         </div>
-        <div class="field"><label for="cp-chronic">الأمراض المزمنة</label>
-          <textarea id="cp-chronic" rows="3" placeholder="مثال: سكر، ضغط..."></textarea></div>
-        <div class="field"><label for="cp-meds">الأدوية المستمرة / حساسية دوائية</label>
-          <textarea id="cp-meds" rows="3" placeholder="مثال: أدوية مستمرة، حساسية من بنسلين..."></textarea></div>
-        <div id="cp-cf-list"></div>
-        <button type="button" class="btn btn-ghost btn-sm" id="cp-cf-add" style="margin-bottom:12px;">+ إضافة حقل</button>
+        <p class="metrics-hint" style="margin:0 0 12px;">اكتبي اسم المعطى وقيمته جنبه. علّمي 📌 على أي معطى بيتكرر مع كل الحالات عشان يظهر جاهز تلقائيًا في كل ملف جديد، والدكتور يعدّل عليه أو يمسحه من صفحة الكشف.</p>
+        <div id="cp-cf-list" class="cf-grid"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="cp-cf-add" style="margin:12px 0;">+ إضافة معطى</button>
         <div class="error-msg" id="cp-error"></div>
         <div style="display:flex;gap:10px;margin-top:6px;">
           <button type="button" class="btn btn-primary" id="cp-save-btn" style="flex:1;justify-content:center;">حفظ البيانات الأولية</button>
@@ -3429,8 +3429,8 @@ async function openPatientChart(patientId, queueId) {
   document.getElementById("v-next-visit").value = "";
   document.getElementById("v-next-visit-note").value = "";
   refreshNextVisitSummary();
-  clearCustomFields("v-cf-list");
-  populatePinnedFieldRows("v-cf-list", "v");
+  document.getElementById("cp-inline-msg").textContent = "";
+  inlineProfileLoadedFor = null;
   document.getElementById("vi-label").value = "سونار";
   document.getElementById("vi-amount").value = "0";
   document.getElementById("vi-discount-type").value = "none";
@@ -3443,6 +3443,10 @@ async function openPatientChart(patientId, queueId) {
   unsubs.push(subscribePatientClinicalProfile(patientId, (data) => {
     currentClinicalProfile = data || null;
     renderClinicalProfile(currentClinicalProfile);
+    /* Fill the inline grid only the first time this chart's profile
+       arrives — later live updates must not overwrite what the doctor
+       is typing right now. */
+    if (inlineProfileLoadedFor !== patientId) loadInlineClinicalProfile(patientId, currentClinicalProfile);
   }));
 }
 
@@ -3518,16 +3522,14 @@ function resolveNextVisitStatus(nextVisitDate, allRows) {
    no clinicalProfile node at all yet. */
 function renderClinicalProfile(data) {
   const box = document.getElementById("c-clinical-profile");
-  const customEntries = data && data.customFields ? Object.entries(data.customFields).filter(([, v]) => v) : [];
-  const hasData = !!(data && (data.chronicConditions || data.ongoingMedications || customEntries.length));
-  if (!hasData) {
-    box.innerHTML = `<div class="empty-state"><div class="icon">📋</div>لا توجد بيانات أولية مسجّلة بعد لهذا المريض</div>`;
-    return;
-  }
+  /* The live, editable copy of this data now sits in the grid at the
+     top of the case file (#cp-inline-list), so this read-only block is
+     only kept for legacy chronic/medication text saved before the
+     merge — nothing to draw when there is none. */
+  if (!data || !(data.chronicConditions || data.ongoingMedications)) { box.innerHTML = ""; return; }
   const rows = [];
   if (data.chronicConditions) rows.push(`<tr><th>الأمراض المزمنة</th><td>${data.chronicConditions.replace(/\n/g, "<br>")}</td></tr>`);
   if (data.ongoingMedications) rows.push(`<tr><th>الأدوية المستمرة</th><td>${data.ongoingMedications.replace(/\n/g, "<br>")}</td></tr>`);
-  customEntries.forEach(([k, v]) => rows.push(`<tr><th>${k}</th><td>${v}</td></tr>`));
   box.innerHTML = `<table class="info-table"><tbody>${rows.join("")}</tbody></table>`;
 }
 
@@ -3678,8 +3680,6 @@ function wireNextVisitPanel() {
 
 /* Modal for the patient's fixed clinical profile — shared between two
    entry points:
-     - v-clinical-profile-btn (exam page, existing patient): saves
-       straight to patients/{currentPatientId}/clinicalProfile.
      - np-clinical-profile-btn (new-patient form, patient doesn't exist
        yet): stages the data in pendingClinicalProfileDraft; np-create-btn's
        handler below writes it to Firebase right after the patient itself
@@ -3692,13 +3692,11 @@ let clinicalProfileModalMode = "existing"; // "existing" | "pending"
 let pendingClinicalProfileDraft = null; // { chronicConditions, ongoingMedications, customFields } staged for a not-yet-created patient
 function refreshPendingClinicalProfileSummary() {
   document.getElementById("np-clinical-profile-summary").textContent =
-    pendingClinicalProfileDraft ? "📋 تم إضافة بيانات أولية (تعديل)" : "+ بيانات أولية / أمراض مزمنة";
+    pendingClinicalProfileDraft ? "📋 تم إضافة البيانات الأولية (تعديل)" : "+ البيانات الأولية";
 }
 async function openClinicalProfileModal(mode, data) {
   clinicalProfileModalMode = mode;
   document.getElementById("cp-error").textContent = "";
-  document.getElementById("cp-chronic").value = data.chronicConditions || "";
-  document.getElementById("cp-meds").value = data.ongoingMedications || "";
   clearCustomFields("cp-cf-list");
   const existingEntries = Object.entries(data.customFields || {});
   if (existingEntries.length) existingEntries.forEach(([label, value]) => customFieldsAddRow("cp-cf-list", label, value));
@@ -3707,28 +3705,18 @@ async function openClinicalProfileModal(mode, data) {
 }
 function wireClinicalProfilePanel() {
   wireCustomFieldsWidget("cp-cf-list", "cp-cf-add");
-  const chronicInput = document.getElementById("cp-chronic");
-  const medsInput = document.getElementById("cp-meds");
   const errorEl = document.getElementById("cp-error");
 
-  document.getElementById("v-clinical-profile-btn").addEventListener("click", () => {
-    openClinicalProfileModal("existing", currentClinicalProfile || {});
-  });
   document.getElementById("np-clinical-profile-btn").addEventListener("click", () => {
     openClinicalProfileModal("pending", pendingClinicalProfileDraft || {});
   });
 
   document.getElementById("cp-save-btn").addEventListener("click", async () => {
     errorEl.textContent = "";
-    const data = {
-      chronicConditions: chronicInput.value.trim(),
-      ongoingMedications: medsInput.value.trim(),
-      customFields: readCustomFields("cp-cf-list")
-    };
+    const data = { customFields: readCustomFields("cp-cf-list") };
     await persistPinnedFields("cp-cf-list", "cp");
     if (clinicalProfileModalMode === "pending") {
-      const isEmpty = !data.chronicConditions && !data.ongoingMedications && !Object.keys(data.customFields).length;
-      pendingClinicalProfileDraft = isEmpty ? null : data;
+      pendingClinicalProfileDraft = Object.keys(data.customFields).length ? data : null;
       refreshPendingClinicalProfileSummary();
       closeModal("modal-clinical-profile");
       return;
@@ -3744,8 +3732,40 @@ function wireClinicalProfilePanel() {
   });
 }
 
+/* ---- The same بيانات أولية, edited inline on the exam page ----
+   #cp-inline-list sits right under the patient's header strip and is
+   bound to patients/{id}/clinicalProfile.customFields, sharing the
+   "cp" pinned-fields template with the modal above. A patient who has
+   nothing saved yet opens with the doctor's pinned template already
+   filled in, so recurring cases need editing, not re-typing. */
+let inlineProfileLoadedFor = null; // patientId the inline grid is currently showing — keeps the live subscription from wiping edits mid-typing
+async function loadInlineClinicalProfile(patientId, data) {
+  clearCustomFields("cp-inline-list");
+  const entries = Object.entries((data && data.customFields) || {});
+  if (entries.length) entries.forEach(([label, value]) => customFieldsAddRow("cp-inline-list", label, value));
+  else await populatePinnedFieldRows("cp-inline-list", "cp");
+  inlineProfileLoadedFor = patientId;
+}
+async function saveInlineClinicalProfile(silent = false) {
+  if (!currentPatientId) return;
+  const msg = document.getElementById("cp-inline-msg");
+  const data = { customFields: readCustomFields("cp-inline-list") };
+  await persistPinnedFields("cp-inline-list", "cp");
+  try {
+    await saveClinicalProfile(currentPatientId, data);
+    if (!silent) { msg.textContent = "✓ تم الحفظ"; setTimeout(() => { msg.textContent = ""; }, 2500); }
+  } catch (err) {
+    console.error("تعذّر حفظ البيانات الأولية", err);
+    if (!silent) msg.textContent = "تعذّر الحفظ، حاولي تاني";
+  }
+}
+function wireInlineClinicalProfile() {
+  wireCustomFieldsWidget("cp-inline-list", "cp-inline-add");
+  document.getElementById("cp-inline-save").addEventListener("click", () => saveInlineClinicalProfile());
+}
+
 function wireExamPanel() {
-  wireCustomFieldsWidget("v-cf-list", "v-cf-add");
+  wireInlineClinicalProfile();
   wireExamInvoicePanel();
   wireExamInvoiceFab();
   wireNextVisitPanel();
@@ -3757,11 +3777,16 @@ function wireExamPanel() {
     const record = {
       note: document.getElementById("v-note").value.trim(),
       nextVisitDate, nextVisitNote,
-      customFields: readCustomFields("v-cf-list")
+      /* Snapshot of the patient's بيانات أولية as they stand at this
+         visit, so the timeline keeps a historical copy even after the
+         doctor edits the live values later. */
+      customFields: readCustomFields("cp-inline-list")
     };
+    /* Any edit the doctor made to the البيانات الأولية grid during this
+       visit is persisted to the patient's file along with the visit. */
+    await saveInlineClinicalProfile(true);
     await completeVisit({ branchId: me.branchId, patientId: currentPatientId, doctorId: me.uid, queueId: currentQueueId, record });
     saveCustomFieldSuggestions(record.customFields);
-    await persistPinnedFields("v-cf-list", "v");
     if (nextVisitDate) {
       await bookAppointment(nextVisitDate, {
         patientId: currentPatientId, patientName, doctorId: me.uid, bookedBy: me.uid,
@@ -3774,8 +3799,6 @@ function wireExamPanel() {
     document.getElementById("v-next-visit").value = "";
     document.getElementById("v-next-visit-note").value = "";
     refreshNextVisitSummary();
-    clearCustomFields("v-cf-list");
-    populatePinnedFieldRows("v-cf-list", "v");
     loadAndRenderDoctorAppointments();
   };
 }
