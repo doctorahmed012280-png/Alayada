@@ -149,14 +149,22 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
   .panel { padding:18px; border-radius:12px; }
   .topbar-search-group .btn-sm { padding:6px 10px; font-size:.78rem; }
 
-  /* Stacked rows instead of a 2-column table on narrow screens: each
-     row becomes a small block with its label above its value, so
-     nothing is squeezed into a horizontal scroll. */
-  .info-table, .info-table tbody, .info-table tr, .info-table th, .info-table td { display:block; width:auto; }
-  .info-table tr { padding:8px 0; border-bottom:1px solid var(--line); }
+  /* Label + value side by side even on narrow screens — the label
+     column is capped so a long value (or a long custom-field label)
+     never crowds the other one out; text that doesn't fit simply
+     wraps within its own column, staying next to its label instead of
+     the row dropping to a whole separate full-width line. Keeps each
+     field to roughly one compact row instead of the two lines a fully
+     stacked label-above-value layout costs. */
+  .info-table, .info-table tbody { display:block; width:auto; }
+  .info-table tr {
+    display:grid; grid-template-columns:minmax(min-content,42%) 1fr;
+    column-gap:10px; align-items:baseline;
+    padding:8px 0; border-bottom:1px solid var(--line);
+  }
   .info-table tr:last-child { border-bottom:none; }
-  .info-table th { padding:0 0 3px; border-bottom:none; font-size:.76rem; }
-  .info-table td { padding:0; border-bottom:none; }
+  .info-table th { display:block; width:auto; padding:0; border-bottom:none; font-size:.76rem; white-space:normal; }
+  .info-table td { display:block; width:auto; padding:0; border-bottom:none; min-width:0; }
 
   .login-wrap { padding:16px; }
   .login-card { width:100%; max-width:400px; padding:32px 24px; }
