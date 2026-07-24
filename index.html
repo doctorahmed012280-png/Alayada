@@ -394,6 +394,20 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
   border-radius:var(--radius-sm); background:#fff; cursor:pointer; }
 .style-color-row label { flex:1; font-size:.9rem; }
 
+/* ---- Visit-timeline toolbar: sort arrow + Excel-style filter button ---- */
+.timeline-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+.timeline-head h3 { margin:0; }
+.timeline-tools { display:flex; gap:6px; }
+.tl-icon-btn { display:inline-flex; align-items:center; justify-content:center; gap:2px;
+  min-width:32px; height:30px; padding:0 7px; cursor:pointer; font-size:.9rem; font-weight:700;
+  color:var(--ink-soft); background:#FBF9F4; border:1px solid var(--line); border-radius:var(--radius-sm); }
+.tl-icon-btn:hover { background:#F0EBDD; color:var(--ink); }
+.tl-icon-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+.tl-caret { font-size:.65rem; line-height:1; }
+.timeline-filter { border:1px solid var(--line); border-radius:var(--radius-sm); background:#FBF9F4; padding:12px; margin-bottom:12px; }
+.tl-summary { margin:0 0 10px; font-size:.8rem; color:var(--ink-soft); }
+.tl-summary:empty { display:none; }
+
 /* Clinical profile summary block sitting above the visit timeline */
 .clinical-profile-box { margin-bottom:16px; }
 .clinical-profile-box .empty-state { padding:16px 10px; }
@@ -755,7 +769,39 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
         </div>
         <div class="grid-2">
           <div class="panel">
-            <h3>السجل التاريخي للزيارات</h3>
+            <div class="timeline-head">
+              <h3>السجل التاريخي للزيارات</h3>
+              <div class="timeline-tools">
+                <button type="button" class="tl-icon-btn" id="tl-sort-btn" title="ترتيب: الأحدث أولًا">
+                  <span id="tl-sort-icon">↓</span>
+                </button>
+                <button type="button" class="tl-icon-btn tl-filter-btn" id="tl-filter-btn" title="فلتر وبحث">
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M1.5 2h13a.5.5 0 0 1 .38.82L10 9v4.2a.5.5 0 0 1-.28.45l-3 1.5A.5.5 0 0 1 6 14.7V9L1.12 2.82A.5.5 0 0 1 1.5 2z"/></svg>
+                  <span class="tl-caret">▾</span>
+                </button>
+              </div>
+            </div>
+            <div class="timeline-filter" id="tl-filter-panel" style="display:none;">
+              <div class="field" style="margin-bottom:10px;"><label for="tl-q">بحث في السجل</label>
+                <input id="tl-q" placeholder="أي كلمة في الملاحظات أو المعطيات..." autocomplete="off"></div>
+              <div class="field" style="margin-bottom:10px;"><label for="tl-range">المدة</label>
+                <select id="tl-range">
+                  <option value="all">الكل</option>
+                  <option value="day">النهاردة</option>
+                  <option value="month">الشهر الحالي</option>
+                  <option value="year">السنة الحالية</option>
+                  <option value="custom">مدة محددة</option>
+                </select></div>
+              <div class="field-row" id="tl-custom-range" style="display:none;">
+                <div class="field"><label for="tl-from">من</label><input type="date" id="tl-from"></div>
+                <div class="field"><label for="tl-to">إلى</label><input type="date" id="tl-to"></div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button type="button" class="btn btn-primary btn-sm" id="tl-apply-btn" style="flex:1;justify-content:center;">تطبيق</button>
+                <button type="button" class="btn btn-ghost btn-sm" id="tl-clear-btn">مسح الفلتر</button>
+              </div>
+            </div>
+            <p class="tl-summary" id="tl-summary"></p>
             <div class="clinical-profile-box" id="c-clinical-profile"></div>
             <ul class="timeline" id="c-timeline"><li class="empty-state">لا توجد زيارات سابقة</li></ul>
           </div>
@@ -3539,6 +3585,7 @@ async function openPatientChart(patientId, queueId) {
   refreshExamInvoicePricing();
   unsubs.push(subscribePatientTimeline(patientId, renderTimeline));
   currentClinicalProfile = null;
+  resetTimelineToolbar();
   renderProfileStrip(null);
   unsubs.push(subscribePatientClinicalProfile(patientId, (data) => {
     currentClinicalProfile = data || null;
@@ -3633,14 +3680,127 @@ function renderClinicalProfile(data) {
   box.innerHTML = `<table class="info-table"><tbody>${rows.join("")}</tbody></table>`;
 }
 
+/* ---- Timeline view state: sort direction + filters ----
+   The subscription hands the full list to renderTimeline(); everything
+   the doctor picks in the toolbar is applied on top of that cached list
+   (applyTimelineView), so switching order or filtering never re-reads
+   from Firebase. Defaults: full list, newest first. */
+let timelineRows = [];
+let timelineSort = "desc"; // "desc" = الأحدث أولًا
+let timelineFilter = { q: "", range: "all", from: "", to: "" };
 function renderTimeline(rows) {
+  timelineRows = rows || [];
+  applyTimelineView();
+}
+function visitDateKey(r) {
+  if (r.date) return r.date;
+  if (!r.createdAt) return "";
+  const d = new Date(r.createdAt);
+  return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+}
+/* Everything the doctor could have typed into a visit, flattened for
+   the free-text search box. */
+function visitSearchText(r) {
+  const parts = [r.date, r.note, r.nextVisitNote, r.nextVisitDate, r.diagnosis, r.symptoms, r.ultrasoundFindings, r.prescription];
+  Object.entries(r.customFields || {}).forEach(([k, v]) => parts.push(k, v));
+  return normalizeArabic(parts.filter(Boolean).join(" "));
+}
+function timelineFilterActive() {
+  const f = timelineFilter;
+  return !!(f.q || (f.range && f.range !== "all"));
+}
+function filterTimelineRows() {
+  const f = timelineFilter;
+  const today = todayKey();
+  return timelineRows.filter(r => {
+    const key = visitDateKey(r);
+    if (f.range === "day" && key !== today) return false;
+    if (f.range === "month" && key.slice(0, 7) !== today.slice(0, 7)) return false;
+    if (f.range === "year" && key.slice(0, 4) !== today.slice(0, 4)) return false;
+    if (f.range === "custom") {
+      if (f.from && (!key || key < f.from)) return false;
+      if (f.to && (!key || key > f.to)) return false;
+    }
+    if (f.q && !visitSearchText(r).includes(normalizeArabic(f.q))) return false;
+    return true;
+  });
+}
+function applyTimelineView() {
+  const rows = filterTimelineRows().slice().sort((a, b) => {
+    const av = a.createdAt || visitDateKey(a), bv = b.createdAt || visitDateKey(b);
+    if (av === bv) return 0;
+    return timelineSort === "desc" ? (av > bv ? -1 : 1) : (av > bv ? 1 : -1);
+  });
+  const summary = document.getElementById("tl-summary");
+  const filtered = timelineFilterActive();
+  summary.textContent = filtered ? `عرض ${rows.length} من ${timelineRows.length} زيارة` : "";
+  document.getElementById("tl-filter-btn").classList.toggle("active", filtered);
+  drawTimeline(rows, filtered);
+}
+function wireTimelineToolbar() {
+  const panel = document.getElementById("tl-filter-panel");
+  const rangeSelect = document.getElementById("tl-range");
+  document.getElementById("tl-filter-btn").addEventListener("click", () => {
+    panel.style.display = panel.style.display === "none" ? "" : "none";
+  });
+  document.getElementById("tl-sort-btn").addEventListener("click", () => {
+    timelineSort = timelineSort === "desc" ? "asc" : "desc";
+    const btn = document.getElementById("tl-sort-btn");
+    document.getElementById("tl-sort-icon").textContent = timelineSort === "desc" ? "↓" : "↑";
+    btn.title = timelineSort === "desc" ? "ترتيب: الأحدث أولًا" : "ترتيب: الأقدم أولًا";
+    btn.classList.toggle("active", timelineSort === "asc");
+    applyTimelineView();
+  });
+  rangeSelect.addEventListener("change", () => {
+    document.getElementById("tl-custom-range").style.display = rangeSelect.value === "custom" ? "" : "none";
+  });
+  document.getElementById("tl-apply-btn").addEventListener("click", () => {
+    timelineFilter = {
+      q: document.getElementById("tl-q").value.trim(),
+      range: rangeSelect.value,
+      from: document.getElementById("tl-from").value,
+      to: document.getElementById("tl-to").value
+    };
+    panel.style.display = "none";
+    applyTimelineView();
+  });
+  document.getElementById("tl-clear-btn").addEventListener("click", () => {
+    timelineFilter = { q: "", range: "all", from: "", to: "" };
+    document.getElementById("tl-q").value = "";
+    rangeSelect.value = "all";
+    document.getElementById("tl-from").value = "";
+    document.getElementById("tl-to").value = "";
+    document.getElementById("tl-custom-range").style.display = "none";
+    applyTimelineView();
+  });
+}
+function resetTimelineToolbar() {
+  timelineSort = "desc";
+  timelineFilter = { q: "", range: "all", from: "", to: "" };
+  const q = document.getElementById("tl-q");
+  if (!q) return;
+  q.value = "";
+  document.getElementById("tl-range").value = "all";
+  document.getElementById("tl-from").value = "";
+  document.getElementById("tl-to").value = "";
+  document.getElementById("tl-custom-range").style.display = "none";
+  document.getElementById("tl-filter-panel").style.display = "none";
+  document.getElementById("tl-sort-icon").textContent = "↓";
+  document.getElementById("tl-sort-btn").classList.remove("active");
+  document.getElementById("tl-filter-btn").classList.remove("active");
+  document.getElementById("tl-summary").textContent = "";
+}
+function drawTimeline(rows, filtered) {
   const list = document.getElementById("c-timeline");
-  if (!rows.length) { list.innerHTML = `<li class="empty-state">لا توجد زيارات سابقة</li>`; return; }
+  if (!rows.length) {
+    list.innerHTML = `<li class="empty-state">${filtered ? "لا توجد زيارات مطابقة للفلتر" : "لا توجد زيارات سابقة"}</li>`;
+    return;
+  }
   list.innerHTML = "";
   rows.forEach(r => {
     const li = document.createElement("li");
     const oldFormat = r.diagnosis || r.symptoms || r.ultrasoundFindings || r.prescription;
-    const nextVisitStatus = resolveNextVisitStatus(r.nextVisitDate, rows);
+    const nextVisitStatus = resolveNextVisitStatus(r.nextVisitDate, timelineRows);
     li.innerHTML = `<div class="t-date">${r.date || "—"}${nextVisitStatus}</div>
       <div class="t-body">
         ${r.note ? r.note.replace(/\n/g, "<br>") : ""}
@@ -4006,6 +4166,7 @@ async function renderProfileStrip(data) {
 }
 
 function wireExamPanel() {
+  wireTimelineToolbar();
   document.getElementById("c-profile-edit-btn").addEventListener("click", () => {
     openClinicalProfileModal("existing", currentClinicalProfile || {});
   });
