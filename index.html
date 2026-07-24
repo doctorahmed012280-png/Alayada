@@ -371,6 +371,18 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
 .cf-grid .cf-pin-wrap input { width:13px; height:13px; }
 .cf-grid .cf-remove { flex:0 0 auto; padding:0 3px; font-size:.75rem; border:none; background:transparent; color:var(--st-cancelled); }
 .cf-grid:empty { display:none; }
+/* Inside the edit modal there's no reason to squeeze: one معطى per
+   full-width row on a phone (small label box, wide value box that's
+   comfortable to type in), two columns once the screen can take it. */
+#cp-cf-list { grid-template-columns:1fr; gap:8px; }
+@media (min-width:700px) { #cp-cf-list { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+#cp-cf-list .custom-field-row { gap:6px !important; padding:6px; }
+#cp-cf-list .custom-field-input-wrap:first-of-type { flex:0 0 34%; }
+#cp-cf-list .custom-field-input-wrap:nth-of-type(2) { flex:1 1 auto; }
+#cp-cf-list .cf-label, #cp-cf-list .cf-value { padding:10px 8px; font-size:16px; }
+#cp-cf-list .cf-value { text-align:start; }
+#cp-cf-list .cf-pin-wrap input { width:17px; height:17px; }
+#cp-cf-list .cf-remove { padding:0 6px; font-size:1rem; }
 
 /* Clinical profile summary block sitting above the visit timeline */
 .clinical-profile-box { margin-bottom:16px; }
