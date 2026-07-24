@@ -144,7 +144,7 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
   }
   .main-header h1 { font-size:1.25rem; }
 
-  .grid-2, .grid-3 { grid-template-columns:1fr; }
+  .grid-2 { grid-template-columns:1fr; }
   .field-row { grid-template-columns:1fr; }
   .panel { padding:18px; border-radius:12px; }
   .topbar-search-group .btn-sm { padding:6px 10px; font-size:.78rem; }
@@ -675,7 +675,6 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
             </div>
             <input type="hidden" id="v-next-visit">
             <input type="hidden" id="v-next-visit-note">
-            <div id="v-abbrev-ref" style="display:none;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;font-size:.82rem;max-height:110px;overflow-y:auto;"></div>
             <div class="field"><label>ملاحظات الكشف</label><textarea id="v-note" rows="6" placeholder="اكتبي ملاحظاتك بأي اختصارات معتادة عندك..."></textarea></div>
             <div class="field"><label>بيانات إضافية (اختياري)</label></div>
             <div id="v-cf-list"></div>
@@ -889,17 +888,6 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
         <div class="panel">
           <h3>الحسابات الحالية</h3>
           <ul class="timeline" id="s-accounts-list"><li class="empty-state">جاري التحميل…</li></ul>
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="panel">
-          <h3>الاختصارات الطبية</h3>
-          <div class="field-row">
-            <div class="field"><label for="ab-abbr">الاختصار</label><input id="ab-abbr" placeholder="مثال: ttt"></div>
-            <div class="field"><label for="ab-meaning">المعنى/المطلوب تسجيله</label><input id="ab-meaning" placeholder="مثال: نفس العلاج السابق"></div>
-          </div>
-          <button class="btn btn-ghost btn-sm" id="ab-add-btn">+ إضافة اختصار</button>
-          <ul class="timeline" id="ab-list" style="margin-top:12px;"><li class="empty-state">لا توجد اختصارات بعد</li></ul>
         </div>
       </div>
     </section>
@@ -1249,11 +1237,6 @@ function renderCustomFieldsView(data) {
   return `<div style="margin-top:6px;font-size:.82rem;color:var(--ink-soft);">` +
     Object.entries(data).map(([k, v]) => `<div>· <strong>${k}:</strong> ${v}</div>`).join("") +
     `</div>`;
-}
-function customFieldsWidgetHtml(listId, addBtnId) {
-  return `<div class="field"><label>بيانات إضافية (اختياري)</label></div>
-    <div id="${listId}"></div>
-    <button type="button" class="btn btn-ghost btn-sm" id="${addBtnId}" style="margin-bottom:12px;">+ إضافة حقل</button>`;
 }
 
 /* ---- "Pinned" (fixed/template) custom fields ----
@@ -2470,42 +2453,11 @@ document.getElementById("image-viewer-rotate").addEventListener("click", () => {
 })();
 
 /* ============================================================
-   MEDICAL ABBREVIATIONS DICTIONARY (doctor-managed, per clinic)
-   A quick-reference list the doctor builds from الإعدادات so their
-   own shorthand ("ttt", "same as before"...) stays legible without
-   hardcoding any specialty into the app itself.
-   ============================================================ */
-async function addAbbreviation(abbr, meaning) {
-  const newRef = push(ref(db, t("abbreviations")));
-  await set(newRef, { abbr, meaning });
-  return newRef.key;
-}
-async function deleteAbbreviation(id) {
-  await set(ref(db, t(`abbreviations/${id}`)), null);
-}
-function subscribeAbbreviations(callback) {
-  const aRef = ref(db, t("abbreviations"));
-  // onValue() already returns the correct unsubscribe function in the v9
-  // modular SDK — off(ref, "value", handler) here was passing that unsubscribe
-  // function where Firebase expects the ORIGINAL callback, so it silently
-  // matched nothing and never actually detached the listener. Returning it
-  // directly fixes every subscribe*() in the app at once.
-  return onValue(aRef, (snap) => {
-    const rows = [];
-    snap.forEach((child) => { rows.push({ id: child.key, ...child.val() }); });
-    callback(rows);
-  });
-}
-
-/* ============================================================
    CLINIC SETTINGS (per-tenant toggles, e.g. pricing/discounts)
    ============================================================ */
 async function getClinicSettings() {
   const snap = await get(ref(db, t("settings")));
   return snap.exists() ? snap.val() : {};
-}
-async function setClinicSetting(key, value) {
-  await update(ref(db, t("settings")), { [key]: value });
 }
 
 /* ============================================================
@@ -3302,7 +3254,6 @@ function initDoctor() {
   doctorQueueUnsub = subscribeToTodayQueue(me.branchId, renderDoctorQueue);
   unsubs.push(doctorQueueUnsub);
   wireExamPanel();
-  wireAbbrevReference();
   wireChartPatientSearch();
   loadAndRenderDoctorAppointments();
 }
@@ -3337,23 +3288,6 @@ function wireChartPatientSearch() {
   document.getElementById("c-open-new-patient-btn").onclick = () => {
     openNewPatientModal((patient) => openPatientChart(patient.id));
   };
-}
-
-function wireAbbrevReference() {
-  const box = document.getElementById("v-abbrev-ref");
-  unsubs.push(subscribeAbbreviations((rows) => {
-    if (!rows.length) { box.style.display = "none"; return; }
-    box.style.display = "";
-    box.innerHTML = `<strong>مرجع الاختصارات (دوسي عشان تضيفيها للملاحظة):</strong><br>` +
-      rows.map(a => `<span class="mono" style="cursor:pointer;text-decoration:underline dotted;margin-inline-end:10px;" data-abbr="${a.abbr}" title="${a.meaning}">${a.abbr}</span>`).join(" ");
-    box.querySelectorAll("[data-abbr]").forEach(el => {
-      el.addEventListener("click", () => {
-        const note = document.getElementById("v-note");
-        note.value += (note.value ? " " : "") + el.dataset.abbr;
-        note.focus();
-      });
-    });
-  }));
 }
 
 async function loadAndRenderDoctorAppointments() {
@@ -4055,27 +3989,6 @@ function wireSettingsPanel() {
       errorBox.textContent = `تعذّر إضافة الفرع (${err.code || err.message}).`;
       console.error("add branch failed", err);
     }
-  };
-
-  const abList = document.getElementById("ab-list");
-  subscribeAbbreviations((rows) => {
-    if (!rows.length) { abList.innerHTML = `<li class="empty-state">لا توجد اختصارات بعد</li>`; return; }
-    abList.innerHTML = "";
-    rows.forEach(a => {
-      const li = document.createElement("li");
-      li.innerHTML = `<div class="t-body"><strong>${a.abbr}</strong> — ${a.meaning}
-        <button type="button" class="btn btn-ghost btn-sm ab-del" data-id="${a.id}" style="margin-right:8px;">حذف</button></div>`;
-      li.querySelector(".ab-del").addEventListener("click", () => deleteAbbreviation(a.id));
-      abList.appendChild(li);
-    });
-  });
-  document.getElementById("ab-add-btn").onclick = async () => {
-    const abbr = document.getElementById("ab-abbr").value.trim();
-    const meaning = document.getElementById("ab-meaning").value.trim();
-    if (!abbr || !meaning) return;
-    await addAbbreviation(abbr, meaning);
-    document.getElementById("ab-abbr").value = "";
-    document.getElementById("ab-meaning").value = "";
   };
 
   document.getElementById("s-create-btn").onclick = async () => {
