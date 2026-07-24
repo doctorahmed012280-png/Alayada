@@ -395,6 +395,11 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
    The exam page only shows a compact summary + button here; the
    actual upload UI (camera, file picker, grid) lives on its own
    page so the exam page stays uncluttered — see #doc-view-attachments. */
+.ps-attach-btn { flex-shrink:0; gap:4px; }
+.ps-attach-count { display:inline-flex; align-items:center; justify-content:center; min-width:19px; height:19px;
+  padding:0 5px; border-radius:999px; background:rgba(255,255,255,.28); font-size:.75rem; font-weight:800; }
+.ps-attach-count:empty { display:none; }
+.ps-attach-count.pending { background:var(--accent); }
 .attachments-nav-card { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
 .attachments-nav-info { display:flex; align-items:center; gap:12px; min-width:0; }
 .attachments-nav-icon { font-size:1.6rem; flex-shrink:0; }
@@ -697,6 +702,9 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
         <div class="panel">
           <div class="patient-strip">
             <div class="ps-name" id="c-name">—</div>
+            <button type="button" class="btn btn-primary btn-sm ps-attach-btn" id="c-attachments-open-btn">
+              📎 الروشتات<span class="ps-attach-count" id="c-attachments-count-label"></span>
+            </button>
             <div class="ps-item"><span>الهاتف</span><b class="mono" id="c-phone">—</b></div>
             <div class="ps-item"><span>العمر</span><b id="c-age">—</b></div>
             <div class="ps-item"><span>فصيلة الدم</span><b id="c-blood">—</b></div>
@@ -710,19 +718,8 @@ body.topbar-search-mode:not(.drawer-open) .sidebar-search-slot { display:flex; f
               <button type="button" class="btn btn-ghost btn-sm" id="cp-inline-add">+ إضافة معطى</button>
               <button type="button" class="btn btn-primary btn-sm" id="cp-inline-save">حفظ البيانات الأولية</button>
             </div>
-            <p class="metrics-hint">أي معطى بتضيفيه هنا بيتحفظ دائمًا وبيظهر مع كل الحالات — القديمة والجديدة — لحد ما تمسحيه من هنا بنفسك. القيم نفسها خاصة بكل مريضة، وعلامة 📌 معناها إن القيمة دي تبقى القيمة الافتراضية اللي تفتح بيها الحالات الجديدة.</p>
           </div>
           <div id="cp-inline-list" class="cf-grid"></div>
-        </div>
-        <div class="panel attachments-nav-card">
-          <div class="attachments-nav-info">
-            <span class="attachments-nav-icon">📎</span>
-            <div style="min-width:0;">
-              <h3 style="margin:0;">الروشتات والتحاليل</h3>
-              <p id="c-attachments-count-label" style="margin:2px 0 0;color:var(--ink-soft);font-size:.85rem;">—</p>
-            </div>
-          </div>
-          <button type="button" class="btn btn-primary btn-sm" id="c-attachments-open-btn">فتح صفحة الملفات ←</button>
         </div>
         <div class="grid-2">
           <div class="panel">
@@ -3461,11 +3458,14 @@ function wireAttachmentsNavCard(patientId) {
   teardownAttachmentsNavCard?.();
   const countLabel = document.getElementById("c-attachments-count-label");
   let remoteCount = 0, localCount = 0;
+  /* The card became a small "📎 الروشتات" button next to the patient's
+     name, so the count is now a compact badge on it (blank at zero, and
+     marked when some files are still waiting to upload). */
   const updateLabel = () => {
     const total = remoteCount + localCount;
-    if (!total) { countLabel.textContent = "لا توجد ملفات مرفوعة بعد"; return; }
-    const fileWord = total === 1 ? "ملف واحد" : (total === 2 ? "ملفان" : `${total} ملفات`);
-    countLabel.textContent = localCount ? `${fileWord} — ${localCount} بانتظار الرفع` : fileWord;
+    countLabel.textContent = total ? String(total) : "";
+    countLabel.classList.toggle("pending", localCount > 0);
+    countLabel.title = localCount ? `${localCount} بانتظار الرفع` : "";
   };
   const refreshLocalCount = async () => {
     try { localCount = (await getLocalAttachmentsForPatient(patientId)).length; }
